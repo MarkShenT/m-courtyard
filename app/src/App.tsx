@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "@/components/layout";
 import { DashboardPage } from "@/pages/Dashboard";
@@ -7,8 +8,44 @@ import { TrainingPage } from "@/pages/Training";
 import { TestingPage } from "@/pages/Testing";
 import { ExportPage } from "@/pages/Export";
 import { SettingsPage } from "@/pages/Settings";
+import { useProjectStore } from "@/stores/projectStore";
+import { useGenerationStore } from "@/stores/generationStore";
+import { useTrainingStore } from "@/stores/trainingStore";
+import { useExportStore } from "@/stores/exportStore";
+import { useExportGgufStore } from "@/stores/exportGgufStore";
+import { useTestingStore } from "@/stores/testingStore";
 
 function App() {
+  const { currentProject } = useProjectStore();
+  const prevProjectIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const pid = currentProject?.id;
+    if (pid === prevProjectIdRef.current) return;
+    prevProjectIdRef.current = pid;
+
+    const genStore = useGenerationStore.getState();
+    if (!genStore.generating) {
+      genStore.resetGeneration();
+      genStore.resetForm();
+    }
+    const trainStore = useTrainingStore.getState();
+    if (trainStore.status !== "running") {
+      trainStore.resetAll();
+    }
+    const exportStore = useExportStore.getState();
+    if (!exportStore.isExporting) {
+      exportStore.clearAll();
+    }
+    const ggufStore = useExportGgufStore.getState();
+    if (!ggufStore.isExporting) {
+      ggufStore.clearAll();
+    }
+    if (pid) {
+      useTestingStore.getState().switchProject(pid);
+    }
+  }, [currentProject?.id]);
+
   return (
     <BrowserRouter>
       <Routes>

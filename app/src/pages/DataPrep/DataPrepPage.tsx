@@ -232,7 +232,9 @@ export function DataPrepPage() {
   const [validationHint, setValidationHint] = useState<string | null>(null);
   const validationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [segmentPreview, setSegmentPreview] = useState<SegmentPreviewResponse | null>(null);
-  const [_segmentPreviewLoading, setSegmentPreviewLoading] = useState(false);
+  const [segmentPreviewLoading, setSegmentPreviewLoading] = useState(false);
+  const [previewTab, setPreviewTab] = useState<"data" | "segment">("data");
+  const [autoSegment, setAutoSegment] = useState(true);
   const datasetSectionRef = useRef<HTMLDivElement>(null);
   const [datasetPage, setDatasetPage] = useState(0);
   const DATASETS_PER_PAGE = 10;
@@ -282,7 +284,6 @@ export function DataPrepPage() {
   });
   const modeCapabilityReady = useRef(false);
 
-
   // Check Ollama availability on mount
   useEffect(() => {
     invoke<{ installed: boolean; running: boolean }>("check_ollama_status")
@@ -294,11 +295,18 @@ export function DataPrepPage() {
     fetchProjects();
   }, [fetchProjects]);
 
+  // On mount (key prop in App.tsx guarantees fresh remount per project),
+  // reset generation store if idle and load this project's files.
   useEffect(() => {
+    const genStore = useGenerationStore.getState();
+    if (!genStore.generating) {
+      genStore.resetForm();
+      genStore.resetGeneration();
+    }
     if (currentProject) {
       loadFiles();
     }
-  }, [currentProject]);
+  }, [currentProject?.id]);
 
   // Listen for cleaning events (local to this page)
   useEffect(() => {
@@ -316,6 +324,9 @@ export function DataPrepPage() {
       if (autoGenAfterClean.current) {
         autoGenAfterClean.current = false;
         setTimeout(() => startGenerationStep(), 300);
+      } else {
+        // Auto-segment completed — switch to segment tab for preview
+        setPreviewTab("segment");
       }
     }).then((u) => unsubs.push(u));
 
@@ -376,6 +387,7 @@ export function DataPrepPage() {
             sourcePaths: paths,
           }).then(() => {
             loadFiles();
+            triggerAutoSegment();
           }).catch((e) => console.error("Drag-drop import failed:", e));
         }
       }
@@ -399,31 +411,36 @@ export function DataPrepPage() {
 
   const loadFiles = async () => {
     if (!currentProject) return;
+    const projectId = currentProject.id;
     try {
       const raw: FileInfo[] = await invoke("list_project_files", {
-        projectId: currentProject.id,
+        projectId,
         subdir: "raw",
       });
       const cleaned: FileInfo[] = await invoke("list_project_files", {
-        projectId: currentProject.id,
+        projectId,
         subdir: "cleaned",
       });
       const versions: DatasetVersionInfo[] = await invoke("list_dataset_versions", {
-        projectId: currentProject.id,
+        projectId,
       });
+
+      if (useProjectStore.getState().currentProject?.id !== projectId) return;
+
       setRawFiles(raw);
       setCleanedFiles(cleaned);
       setDatasetVersions(versions);
       setDatasetPage(0);
       setExpandedDataset(null);
-      await loadSegmentPreview(currentProject.id);
+      await loadSegmentPreview(projectId);
 
       // Sample file content for mode detection
       if (raw.length > 0) {
         try {
           const samples: RawFileSample[] = await invoke("sample_raw_files", {
-            projectId: currentProject.id,
+            projectId,
           });
+          if (useProjectStore.getState().currentProject?.id !== projectId) return;
           const result = analyzeContentForModes(samples);
           setModeCapability(result);
           // Smart default: auto-select first recommended mode if user hasn't chosen one yet
@@ -458,6 +475,7 @@ export function DataPrepPage() {
         projectId,
         limit: 8,
       });
+      if (useProjectStore.getState().currentProject?.id !== projectId) return;
       setSegmentPreview(payload);
     } catch (e) {
       console.error("Failed to preview cleaned segments:", e);
@@ -467,6 +485,29 @@ export function DataPrepPage() {
     }
   };
 
+
+  // Auto-segment: trigger cleaning after file import (algorithmic, no AI)
+  const triggerAutoSegment = async () => {
+    if (!currentProject || !autoSegment) return;
+    if (generating || cleaning) return;
+    try {
+      setCleaning(true);
+      setCleanProgress(t("generate.cleaningStatus"));
+      autoGenAfterClean.current = false; // don't auto-generate, just segment
+      await invoke("start_cleaning", {
+        projectId: currentProject.id,
+        lang: i18nGlobal.language,
+        options: {
+          privacyFilter: enablePrivacyFilter,
+          fuzzyDedup: enableFuzzyDedup,
+          fuzzyDedupThreshold: fuzzyDedupThreshold,
+        },
+      });
+    } catch {
+      setCleaning(false);
+      setCleanProgress("");
+    }
+  };
 
   const { canStart: taskCanStart, acquireTask } = useTaskStore();
   const taskCheck = currentProject ? taskCanStart(currentProject.id, "generating") : { allowed: true };
@@ -624,6 +665,12 @@ export function DataPrepPage() {
     setCleaning(false);
     setCleanProgress("");
     useGenerationStore.getState().stopGeneration();
+    setPreview(null);
+    setPreviewName("");
+    setSegmentPreview(null);
+    setRetryingVersion(null);
+    setQueueExpanded(false);
+    autoGenAfterClean.current = false;
     setPipelineStage("idle");
     useTaskStore.getState().releaseTask();
   };
@@ -633,16 +680,18 @@ export function DataPrepPage() {
   const reloadFiles = async () => {
     const proj = useProjectStore.getState().currentProject;
     if (!proj) return;
+    const projectId = proj.id;
     try {
-      const raw: FileInfo[] = await invoke("list_project_files", { projectId: proj.id, subdir: "raw" });
-      const cleaned: FileInfo[] = await invoke("list_project_files", { projectId: proj.id, subdir: "cleaned" });
-      const versions: DatasetVersionInfo[] = await invoke("list_dataset_versions", { projectId: proj.id });
+      const raw: FileInfo[] = await invoke("list_project_files", { projectId, subdir: "raw" });
+      const cleaned: FileInfo[] = await invoke("list_project_files", { projectId, subdir: "cleaned" });
+      const versions: DatasetVersionInfo[] = await invoke("list_dataset_versions", { projectId });
+      if (useProjectStore.getState().currentProject?.id !== projectId) return;
       setRawFiles(raw);
       setCleanedFiles(cleaned);
       setDatasetVersions(versions);
       setDatasetPage(0);
       setExpandedDataset(null);
-      await loadSegmentPreview(proj.id);
+      await loadSegmentPreview(projectId);
     } catch (e) {
       console.error("Reload files failed:", e);
     }
@@ -665,6 +714,7 @@ export function DataPrepPage() {
           sourcePaths: paths,
         });
         await loadFiles();
+        triggerAutoSegment();
       }
     } catch (e) {
       console.error("Import failed:", e);
@@ -687,6 +737,7 @@ export function DataPrepPage() {
           sourcePaths: [dir],
         });
         await loadFiles();
+        triggerAutoSegment();
       }
     } catch (e) {
       console.error("Import folder failed:", e);
@@ -905,19 +956,31 @@ export function DataPrepPage() {
             </button>
             {step1Open && (
               <div ref={dropZoneRef} className="border-t border-border p-4 space-y-3">
-                {/* Merge checkbox + Clear all — toolbar row */}
+                {/* Merge checkbox + Auto-segment checkbox + Clear all — toolbar row */}
                 {rawFiles.length > 0 && (
                   <div className="flex items-center justify-between">
-                    <label
-                      className="flex items-center gap-2 cursor-pointer select-none"
-                      title={t("mergeToggle.hint")}
-                      onClick={() => setMergeMode(!mergeMode)}
-                    >
-                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${mergeMode ? "border-primary bg-primary" : "border-muted-foreground/40 bg-transparent"}`}>
-                        {mergeMode && <Check size={11} className="text-primary-foreground" />}
-                      </span>
-                      <span className="text-xs text-foreground">{t("mergeToggle.label")}</span>
-                    </label>
+                    <div className="flex items-center gap-4">
+                      <label
+                        className="flex items-center gap-2 cursor-pointer select-none"
+                        title={t("mergeToggle.hint")}
+                        onClick={() => setMergeMode(!mergeMode)}
+                      >
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${mergeMode ? "border-primary bg-primary" : "border-muted-foreground/40 bg-transparent"}`}>
+                          {mergeMode && <Check size={11} className="text-primary-foreground" />}
+                        </span>
+                        <span className="text-xs text-foreground">{t("mergeToggle.label")}</span>
+                      </label>
+                      <label
+                        className="flex items-center gap-2 cursor-pointer select-none"
+                        title={t("autoSegment.hint")}
+                        onClick={() => setAutoSegment(!autoSegment)}
+                      >
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${autoSegment ? "border-primary bg-primary" : "border-muted-foreground/40 bg-transparent"}`}>
+                          {autoSegment && <Check size={11} className="text-primary-foreground" />}
+                        </span>
+                        <span className="text-xs text-foreground">{t("autoSegment.label")}</span>
+                      </label>
+                    </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowClearAllDialog(true); }}
                       disabled={cleaning || generating}
@@ -1326,58 +1389,148 @@ export function DataPrepPage() {
         {/* Preview Panel / AI Log Panel — outer border aligned with left 1.1 card */}
         <div ref={previewPanelRef} className="sticky top-4 space-y-4">
           <div className="rounded-lg border border-border bg-card">
+            {/* ─── Tab header: Data Preview / Smart Segmentation ─── */}
             <div className="flex items-center justify-between p-4">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                {t("aiLog")}
-              {generating && <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-success" />}
-              {!generating && previewName && !(aiLogs.length > 0) && (
-                <span className="font-normal text-muted-foreground">
-                  — {previewName}
-                </span>
-              )}
-            </h3>
-            {!generating && aiLogs.length > 0 && (
-              <button
-                onClick={() => clearLogs()}
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {tc("clearLogs")}
-              </button>
-            )}
-          </div>
-          <div className="border-t border-border px-4 pb-4 pt-0">
-            <div ref={logScrollRef} className="log-scroll-container min-h-[560px] max-h-[calc(100vh-240px)] overflow-auto rounded-md border border-border/60 bg-muted/10 p-3 mt-3">
-              {(generating || aiLogs.length > 0) ? (
-                <div className="space-y-0.5 font-mono text-xs leading-relaxed">
-                  {aiLogs.length === 0 && generating && (
-                    <p className="text-muted-foreground">{t("connectingAI")}</p>
-                  )}
-                  {aiLogs.map((log, idx) => (
-                    <p
-                      key={idx}
-                      className={`whitespace-pre-wrap ${
-                        log.includes("✅") ? "text-success" :
-                        log.includes("❌") ? "text-red-400" :
-                        log.includes("⚠️") ? "text-warning" :
-                        log.includes("🤖") ? "text-info" :
-                        log.includes("📡") || log.includes("💾") ? "text-tag-trained" :
-                        log.includes("──") || log.includes("══") ? "text-muted-foreground font-semibold" :
-                        "text-foreground"
-                      }`}
-                    >
-                      {log}
+              <div className="flex items-center gap-1">
+                {/* During generation, only show data tab; otherwise show both */}
+                <button
+                  onClick={() => setPreviewTab("data")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    (generating || cleaning || previewTab === "data")
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  }`}
+                >
+                  {t("previewTab.data")}
+                  {generating && <span className="ml-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-success" />}
+                </button>
+                {!generating && !cleaning && (
+                  <button
+                    onClick={() => setPreviewTab("segment")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      previewTab === "segment"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {t("previewTab.segment")}
+                    {segmentPreview && segmentPreview.summary.total_segments > 0 && (
+                      <span className="ml-1.5 rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        {segmentPreview.summary.total_segments}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {previewTab === "data" && !generating && previewName && !(aiLogs.length > 0) && (
+                  <span className="text-xs font-normal text-muted-foreground truncate max-w-[120px]">
+                    {previewName}
+                  </span>
+                )}
+                {previewTab === "data" && !generating && aiLogs.length > 0 && (
+                  <button
+                    onClick={() => clearLogs()}
+                    className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {tc("clearLogs")}
+                  </button>
+                )}
+                {previewTab === "segment" && segmentPreview && (
+                  <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-foreground">
+                    {t("segment.strategyLabel", { strategy: getStrategyLabel(segmentPreview.summary.primary_strategy || "paragraph_balanced") })}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="border-t border-border px-4 pb-4 pt-0">
+              {/* ─── Data Preview tab content ─── */}
+              {(generating || cleaning || previewTab === "data") && previewTab !== "segment" && (
+                <div ref={logScrollRef} className="log-scroll-container min-h-[560px] max-h-[calc(100vh-240px)] overflow-auto rounded-md border border-border/60 bg-muted/10 p-3 mt-3">
+                  {(generating || aiLogs.length > 0) ? (
+                    <div className="space-y-0.5 font-mono text-sm leading-loose">
+                      {aiLogs.length === 0 && generating && (
+                        <p className="text-muted-foreground">{t("connectingAI")}</p>
+                      )}
+                      {aiLogs.map((log, idx) => (
+                        <p
+                          key={idx}
+                          className={`whitespace-pre-wrap ${
+                            log.includes("✅") ? "text-success" :
+                            log.includes("❌") ? "text-red-400" :
+                            log.includes("⚠️") ? "text-warning" :
+                            log.includes("🤖") ? "text-info" :
+                            log.includes("📡") || log.includes("💾") ? "text-tag-trained" :
+                            log.includes("──") || log.includes("══") ? "text-muted-foreground font-semibold" :
+                            "text-foreground"
+                          }`}
+                        >
+                          {log}
+                        </p>
+                      ))}
+                      <div ref={logEndRef} />
+                    </div>
+                  ) : preview ? (
+                    <pre className="whitespace-pre-wrap text-sm text-foreground font-mono leading-loose">
+                      {preview}
+                    </pre>
+                  ) : (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      {t("preview.noContent")}
                     </p>
-                  ))}
-                  <div ref={logEndRef} />
+                  )}
                 </div>
-              ) : preview ? (
-                <pre className="whitespace-pre-wrap text-xs text-foreground font-mono leading-relaxed">
-                  {preview}
-                </pre>
-              ) : (
-                <p className="py-8 text-center text-xs text-muted-foreground">
-                  {t("preview.noContent")}
-                </p>
+              )}
+              {/* ─── Smart Segmentation tab content ─── */}
+              {!generating && !cleaning && previewTab === "segment" && (
+                <div className="min-h-[560px] max-h-[calc(100vh-240px)] overflow-auto rounded-md border border-border/60 bg-muted/10 p-3 mt-3">
+                  {segmentPreviewLoading ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("segment.loading")}</p>
+                  ) : segmentPreview && segmentPreview.summary.total_segments > 0 ? (
+                    <div className="space-y-4">
+                      <p className="text-xs leading-relaxed text-muted-foreground">{t("segment.hint")}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-md border border-border bg-card/60 px-3 py-2">
+                          <p className="text-xs text-muted-foreground">{t("segment.summary.total")}</p>
+                          <p className="mt-0.5 text-base font-semibold text-foreground">{segmentPreview.summary.total_segments}</p>
+                        </div>
+                        <div className="rounded-md border border-border bg-card/60 px-3 py-2">
+                          <p className="text-xs text-muted-foreground">{t("segment.summary.avg")}</p>
+                          <p className="mt-0.5 text-base font-semibold text-foreground">{segmentPreview.summary.avg_chars}</p>
+                        </div>
+                        <div className="rounded-md border border-border bg-card/60 px-3 py-2">
+                          <p className="text-xs text-muted-foreground">{t("segment.summary.range")}</p>
+                          <p className="mt-0.5 text-sm font-medium text-foreground">{segmentPreview.summary.min_chars} - {segmentPreview.summary.max_chars}</p>
+                        </div>
+                        <div className="rounded-md border border-border bg-card/60 px-3 py-2">
+                          <p className="text-xs text-muted-foreground">{t("segment.summary.tooShort")} / {t("segment.summary.tooLong")}</p>
+                          <p className="mt-0.5 text-sm font-medium text-foreground">{segmentPreview.summary.short_segments} / {segmentPreview.summary.long_segments}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {segmentPreview.items.map((item) => (
+                          <div key={`${item.id}-${item.source_file}`} className="rounded-md border border-border bg-card/60 px-3 py-2.5">
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <span className="text-sm font-semibold text-foreground">{t("segment.itemLabel", { id: item.id })}</span>
+                              <span className="text-xs text-muted-foreground">{t("segment.chars", { count: item.char_count })} · {t("segment.lines", { count: item.line_count })}</span>
+                            </div>
+                            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                              <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(8, Math.round((item.char_count / segmentMaxChars) * 100))}%` }} />
+                            </div>
+                            <p className="line-clamp-3 text-sm leading-relaxed text-foreground/80">{item.text_preview}</p>
+                            {item.source_file && (
+                              <p className="mt-1.5 text-xs text-muted-foreground/70">{t("segment.source", { name: item.source_file })}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      {t("segment.empty")}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -1415,58 +1568,6 @@ export function DataPrepPage() {
                       : 100
                   })}
                 </span>
-              </div>
-            </div>
-          )}
-
-          {/* ─── Segment Preview Panel ─── */}
-          {!generating && segmentPreview && segmentPreview.summary.total_segments > 0 && (
-            <div className="rounded-lg border border-border bg-card">
-              <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground">{t("segment.title")}</p>
-                  <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-foreground">
-                    {t("segment.strategyLabel", { strategy: getStrategyLabel(segmentPreview.summary.primary_strategy || "paragraph_balanced") })}
-                  </span>
-                </div>
-              </div>
-              <div className="border-t border-border px-4 pb-3">
-                <p className="text-[11px] leading-relaxed text-muted-foreground mt-2">{t("segment.hint")}</p>
-                <div className="grid grid-cols-2 gap-2 text-[11px] mt-2">
-                  <div className="rounded-md border border-border bg-card/60 px-2 py-1.5">
-                    <p className="text-muted-foreground">{t("segment.summary.total")}</p>
-                    <p className="font-medium text-foreground">{segmentPreview.summary.total_segments}</p>
-                  </div>
-                  <div className="rounded-md border border-border bg-card/60 px-2 py-1.5">
-                    <p className="text-muted-foreground">{t("segment.summary.avg")}</p>
-                    <p className="font-medium text-foreground">{segmentPreview.summary.avg_chars}</p>
-                  </div>
-                  <div className="rounded-md border border-border bg-card/60 px-2 py-1.5">
-                    <p className="text-muted-foreground">{t("segment.summary.range")}</p>
-                    <p className="font-medium text-foreground">{segmentPreview.summary.min_chars} - {segmentPreview.summary.max_chars}</p>
-                  </div>
-                  <div className="rounded-md border border-border bg-card/60 px-2 py-1.5">
-                    <p className="text-muted-foreground">{t("segment.summary.tooShort")} / {t("segment.summary.tooLong")}</p>
-                    <p className="font-medium text-foreground">{segmentPreview.summary.short_segments} / {segmentPreview.summary.long_segments}</p>
-                  </div>
-                </div>
-                <div className="mt-2 max-h-36 space-y-1.5 overflow-auto pr-1">
-                  {segmentPreview.items.map((item) => (
-                    <div key={`${item.id}-${item.source_file}`} className="rounded-md border border-border bg-card/60 px-2 py-1.5 text-[11px]">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="font-medium text-foreground">{t("segment.itemLabel", { id: item.id })}</span>
-                        <span className="text-muted-foreground">{t("segment.chars", { count: item.char_count })} · {t("segment.lines", { count: item.line_count })}</span>
-                      </div>
-                      <div className="mb-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(8, Math.round((item.char_count / segmentMaxChars) * 100))}%` }} />
-                      </div>
-                      <p className="line-clamp-2 text-muted-foreground">{item.text_preview}</p>
-                      {item.source_file && (
-                        <p className="mt-1 text-[10px] text-muted-foreground/90">{t("segment.source", { name: item.source_file })}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           )}
@@ -1577,7 +1678,6 @@ export function DataPrepPage() {
             </div>
           )}
         </div>
-      </div>
       </div>
 
       {/* ===== Training Queue Status (full width below main grid) ===== */}

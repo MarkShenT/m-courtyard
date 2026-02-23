@@ -5,20 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.5] - 2026-02-22
+## [0.4.5] - 2026-02-23
 
-Delivers the **Data Quality Improvement** cluster (PRD D-3 · D-4 · D-5 · D-6): privacy filtering, fuzzy deduplication, dataset quality scoring, and failed-sample batch retry.
+Delivers the **Data Quality Improvement** cluster (PRD D-3 · D-4 · D-5 · D-6) plus a critical cross-project isolation fix, a reworked Smart Segmentation preview UX, and readability improvements.
 
 ### Added
 - **Cleaning Quality Controls (1.2)**: Added Privacy Filter, Fuzzy Deduplication, and Quality Scoring toggles in Data Preparation; fuzzy dedup supports a configurable similarity threshold slider
 - **Failed Sample Batch Retry**: Dataset items now show failed sample count and provide a one-click retry action that regenerates only failed segments from a selected historical version
 - **Quality Badge and Score**: Dataset list and expanded details now display quality grade (A/B/C) and score when quality scoring is enabled
+- **Smart Segmentation Preview Tab**: The right-hand preview panel now has two tabs — "Data Preview" and "Smart Segmentation"; the segment tab is only shown when not generating/cleaning; the tab header displays the total segment count and auto-detected strategy label
+- **Auto-Segmentation on File Upload**: New "Smart Segmentation" checkbox in the 1.1 toolbar (default on, next to "Merge as Single Dataset"); when enabled, uploading files via Add Files, Add Folder, or drag-and-drop automatically triggers text cleaning and segmentation so results are immediately viewable in the Segment tab
+- **Auto-Switch to Segment Tab**: After auto-segmentation completes the preview panel automatically switches to the Smart Segmentation tab
 
 ### Changed
 - **Generation Parameter Pipeline**: Frontend store, Tauri command parameters, and Python scripts are now aligned to pass `privacy_filter`, `fuzzy_dedup`, `fuzzy_dedup_threshold`, `quality_scoring`, `retry_failed_only`, and `input_segments`
 - **Retry Flow Guard**: `generate_dataset` now validates cleaned segments only for normal generation; retry mode no longer incorrectly blocks on missing `cleaned/segments.jsonl`
+- **Preview Area Font Sizes**: Data preview text increased from `text-xs` to `text-sm` with `leading-loose` for improved readability; Smart Segmentation item titles use `text-sm font-semibold`, stat values use `text-base font-semibold`, body previews use `text-sm leading-relaxed text-foreground/80`
 
 ### Fixed
+- **Cross-Project Data Persistence — Root Cause** (BUG-106/107): The previous fix placed `key` on `<Route element>` which React Router v6 does not propagate through `<Outlet>`; fixed by adding `key={projectId}` directly on the `<Outlet>` in `AppLayout`, forcing a complete re-mount of all child routes on project switch; removed now-redundant `key` props from individual `<Route>` elements in `App.tsx`
 - **Legacy Script Compatibility**: Added parser support for new generation flags in fallback scripts to prevent argument parsing errors (`exit code 2`) when quality/retry options are passed
 
 ## [0.4.4] - 2026-02-21

@@ -149,6 +149,14 @@
   "importedCount": "{{count}} file(s) imported via drag & drop",
   "datasetReady": "Dataset Ready — Go to Training",
   "aiLog": "Data Preview",
+  "previewTab": {
+    "data": "Data Preview",
+    "segment": "Smart Segmentation"
+  },
+  "autoSegment": {
+    "label": "Smart Segmentation",
+    "hint": "Automatically clean and segment text after file upload. Preview results in the right panel."
+  },
   "connectingAI": "Connecting to AI model...",
   "validation": {
     "needFiles": "Please import data files first",

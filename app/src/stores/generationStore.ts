@@ -85,7 +85,21 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   startGeneration: () =>
     set({ generating: true, genStopped: false, genProgress: "", genError: "", ollamaPathMismatch: false, genCurrentFileIdx: 0, genSuccessCount: 0, genFailCount: 0 }),
 
-  stopGeneration: () => set({ generating: false }),
+  stopGeneration: () =>
+    set({
+      generating: false,
+      genStopped: true,
+      genProgress: "",
+      genStep: 0,
+      genTotal: 0,
+      genError: "",
+      aiLogs: [],
+      ollamaPathMismatch: false,
+      genFiles: [],
+      genCurrentFileIdx: 0,
+      genSuccessCount: 0,
+      genFailCount: 0,
+    }),
 
   resetGeneration: () =>
     set({
@@ -133,6 +147,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     const u1 = await listen<{ step?: number; total?: number; desc?: string }>(
       "dataset:progress",
       (e) => {
+        if (!get().generating) return;
         const step = e.payload.step ?? get().genStep;
         const total = e.payload.total ?? get().genTotal;
         // Estimate which file we're currently processing based on cumulative size ratio
@@ -173,6 +188,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     const u2 = await listen<{ message?: string; line?: string }>(
       "dataset:log",
       (e) => {
+        if (!get().generating) return;
         const msg = e.payload.message || e.payload.line || "";
         if (msg) {
           set((s) => ({ aiLogs: [...s.aiLogs.slice(-500), msg] }));
@@ -182,6 +198,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     unlistens.push(u2);
 
     const u2v = await listen<{ version?: string }>("dataset:version", (e) => {
+      if (!get().generating) return;
       const vid = e.payload.version;
       if (vid) {
         set({ newVersionIds: [vid] });
@@ -190,6 +207,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     unlistens.push(u2v);
 
     const u3 = await listen("dataset:complete", () => {
+      if (!get().generating) return;
       set({
         generating: false,
         genProgress: "",
@@ -205,6 +223,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     unlistens.push(u3);
 
     const u4 = await listen<{ message?: string; is_path_mismatch?: boolean }>("dataset:error", (e) => {
+      if (!get().generating) return;
       set({
         generating: false,
         genProgress: "",
@@ -219,15 +238,21 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     });
     unlistens.push(u4);
 
-    const u5 = await listen<{ message?: string }>("dataset:stopped", (e) => {
-      set((s) => ({
+    const u5 = await listen("dataset:stopped", () => {
+      set({
         generating: false,
         genStopped: true,
-        aiLogs: [
-          ...s.aiLogs,
-          `\n⏹ ${e.payload.message || "Generation stopped. Incomplete data has been cleaned up."}`,
-        ],
-      }));
+        genProgress: "",
+        genStep: 0,
+        genTotal: 0,
+        genError: "",
+        aiLogs: [],
+        ollamaPathMismatch: false,
+        genFiles: [],
+        genCurrentFileIdx: 0,
+        genSuccessCount: 0,
+        genFailCount: 0,
+      });
       useTaskStore.getState().releaseTask();
       get()._reloadFiles?.();
     });

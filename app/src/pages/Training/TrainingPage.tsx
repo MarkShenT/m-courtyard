@@ -375,10 +375,12 @@ export function TrainingPage() {
   // Load dataset versions from backend
   const loadDatasetVersions = async () => {
     if (!currentProject) return;
+    const projectId = currentProject.id;
     try {
       const versions = await invoke<DatasetVersionInfo[]>(
-        "list_dataset_versions", { projectId: currentProject.id }
+        "list_dataset_versions", { projectId }
       );
+      if (useProjectStore.getState().currentProject?.id !== projectId) return;
       setDatasetVersions(versions);
       // Auto-select latest (first) version if none selected or current selection no longer exists
       if (versions.length > 0) {
@@ -405,9 +407,15 @@ export function TrainingPage() {
     initListeners();
   }, [initListeners]);
 
+  // On mount (key prop in App.tsx guarantees fresh remount per project),
+  // reset training store if idle and load this project's dataset versions.
   useEffect(() => {
+    const trainStore = useTrainingStore.getState();
+    if (trainStore.status !== "running") {
+      trainStore.resetAll();
+    }
     if (currentProject) loadDatasetVersions();
-  }, [currentProject]);
+  }, [currentProject?.id]);
 
   useEffect(() => {
     const prevStatus = prevStatusRef.current;

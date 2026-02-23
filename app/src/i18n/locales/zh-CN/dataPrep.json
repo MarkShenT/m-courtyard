@@ -149,6 +149,14 @@
   "importedCount": "通过拖拽导入了 {{count}} 个文件",
   "datasetReady": "数据集已就绪 — 去训练模型",
   "aiLog": "数据预览",
+  "previewTab": {
+    "data": "数据预览",
+    "segment": "智能分段"
+  },
+  "autoSegment": {
+    "label": "智能分段",
+    "hint": "上传文件后自动执行文本清洗与智能分段，可在预览区查看分段结果"
+  },
   "connectingAI": "正在连接 AI 模型...",
   "validation": {
     "needFiles": "请先导入数据文件",

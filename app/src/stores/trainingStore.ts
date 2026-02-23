@@ -67,11 +67,17 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     }),
 
   stopTraining: () =>
-    set((s) => ({
+    set({
       status: "idle",
       currentJobId: null,
-      logs: [...s.logs, "--- Training stopped by user ---"],
-    })),
+      logs: [],
+      trainLossData: [],
+      valLossData: [],
+      currentIter: 0,
+      adapterPath: null,
+      startedAt: null,
+      completedAt: null,
+    }),
 
   resetAll: () =>
     set({
@@ -112,6 +118,8 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     const u1 = await listen<{ job_id: string; line: string }>(
       "training-log",
       (event) => {
+        const { status, currentJobId } = get();
+        if (status !== "running" || !currentJobId || event.payload.job_id !== currentJobId) return;
         const line = event.payload.line;
         get().addLog(line);
 
@@ -157,7 +165,13 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     const u2 = await listen<{ job_id: string; success: boolean }>(
       "training-complete",
       (event) => {
-        set({ status: event.payload.success ? "completed" : "failed", completedAt: Date.now() });
+        const { status, currentJobId } = get();
+        if (status !== "running" || !currentJobId || event.payload.job_id !== currentJobId) return;
+        set({
+          status: event.payload.success ? "completed" : "failed",
+          currentJobId: null,
+          completedAt: Date.now(),
+        });
         useTaskStore.getState().releaseTask();
         // Send macOS notification
         import("@tauri-apps/api/core").then(({ invoke: inv }) => {
@@ -182,8 +196,11 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     const u3 = await listen<{ job_id: string; error: string }>(
       "training-error",
       (event) => {
+        const { status, currentJobId } = get();
+        if (status !== "running" || !currentJobId || event.payload.job_id !== currentJobId) return;
         set((s) => ({
           status: "failed" as TrainingStatus,
+          currentJobId: null,
           logs: [...s.logs, `ERROR: ${event.payload.error}`],
         }));
         useTaskStore.getState().releaseTask();
