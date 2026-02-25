@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.7] - 2026-02-25
+
+Feature release delivering the **Multi-Target Export** cluster (E-5 · E-6 · E-7) and a GGUF error experience improvement.
+
+### Added
+- **Keep MLX Fused Model (E-5)**: New "Keep fused model" checkbox (default on) during Ollama export preserves the intermediate MLX safetensors directory so it can be loaded directly into LM Studio without re-exporting
+- **Export as MLX Model**: Dedicated standalone MLX export section — fuses LoRA adapter into a full MLX safetensors model, saved to `export/mlx/`, ready to drag into LM Studio or use with `mlx-lm.server`
+- **Local Inference Server (E-6)**: One-click start/stop for `mlx-lm.server` after MLX export; displays live OpenAI-compatible API endpoint; supports OpenWebUI, AnythingLLM, Chatbox, and any OpenAI-compatible client
+- **Post-Export Connection Guide (E-7)**: Collapsible "How to connect" panel in the Export page covering all four deployment paths: Ollama / LM Studio MLX / mlx-lm server / GGUF
+- **GGUF Architecture Error — Friendly Message**: When `mlx_lm` reports that a model architecture is not supported for GGUF conversion (e.g. `mistral3`), the error is now translated into a clear, actionable message explaining it is an upstream third-party limitation, not an M-Courtyard bug, and suggests MLX export as an alternative
+
+### Fixed
+- **Export Success Card Path** (BUG-114): Top "Open Folder" button in the export success card now prioritises the retained MLX fused directory (`fusedDir`) when available, rather than always opening the Ollama models directory
+- **Export Success Card UI** (BUG-115): Redesigned the result card — removed `text-[10px]`/`text-[11px]` micro-font sizes, promoted to `text-xs`/`text-sm`, added section dividers and a cleaner dark code block style for model paths
+
+### Changed
+- `keepFused` defaults to `true` so the fused model is preserved unless the user explicitly opts out
+
 ## [0.4.6] - 2026-02-24
 
 Critical bug-fix release addressing PDF/DOCX processing failures reported by the community and a UI regression in the data preview panel.

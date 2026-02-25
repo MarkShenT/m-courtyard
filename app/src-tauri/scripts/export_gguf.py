@@ -115,7 +115,13 @@ def _run(args):
     ok, _stdout, stderr = run_cli(cmd, timeout=900)
 
     if not ok:
-        emit("error", message=t("gguf.fuse_fail", error=(stderr or "Unknown error")[-600:]))
+        # Detect upstream architecture limitation and emit a friendly message
+        import re as _re
+        _arch_match = _re.search(r'Model type (\S+) not supported for GGUF conversion', stderr or '')
+        if _arch_match:
+            emit("error", message=t("gguf.arch_not_supported", arch=_arch_match.group(1)))
+        else:
+            emit("error", message=t("gguf.fuse_fail", error=(stderr or "Unknown error")[-600:]))
         sys.exit(1)
 
     gguf_path = find_gguf(args.output_dir)

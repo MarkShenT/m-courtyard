@@ -10,7 +10,7 @@ use commands::training::{start_training, stop_training, open_project_folder, lis
 use commands::files::{import_files, list_project_files, read_file_content, delete_file};
 use commands::dataset::{start_cleaning, generate_dataset, get_dataset_preview, stop_generation, list_dataset_versions, open_dataset_folder, sample_raw_files, preview_clean_segments};
 use commands::inference::start_inference;
-use commands::export::{export_to_ollama, export_to_gguf, verify_export_model};
+use commands::export::{export_to_ollama, export_to_gguf, export_to_mlx, verify_export_model, start_mlx_server, stop_mlx_server, get_mlx_server_status, MlxServerState};
 use commands::storage::{scan_storage_usage, cleanup_project_cache};
 use commands::notification::send_notification;
 
@@ -19,6 +19,7 @@ pub fn run() {
     let migrations = db::run_migrations();
 
     tauri::Builder::default()
+        .manage(MlxServerState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -63,7 +64,11 @@ pub fn run() {
             start_inference,
             export_to_ollama,
             export_to_gguf,
+            export_to_mlx,
             verify_export_model,
+            start_mlx_server,
+            stop_mlx_server,
+            get_mlx_server_status,
             get_app_config,
             set_model_source_path,
             set_export_path,

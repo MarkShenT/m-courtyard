@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Upload, AlertCircle, AlertTriangle, CheckCircle2, XCircle, FolderOpen, ChevronDown, ChevronRight, Circle, Loader2, Copy, Check, Trash2 } from "lucide-react";
+import { Upload, AlertCircle, AlertTriangle, CheckCircle2, XCircle, FolderOpen, ChevronDown, ChevronRight, Circle, Loader2, Copy, Check, Trash2, Play, Square, BookOpen } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useExportStore } from "@/stores/exportStore";
 import { useExportGgufStore } from "@/stores/exportGgufStore";
+import { useExportMlxStore } from "@/stores/exportMlxStore";
 import { StepProgress } from "@/components/StepProgress";
 
 // Export pipeline step keys (labels come from i18n)
@@ -34,7 +35,7 @@ export function ExportPage() {
   // Persistent export state from store
   const {
     isExporting, result, exportLogs, currentStep, exportProgress,
-    outputDir, ollamaDir, manifestDir, startExport, clearAll: clearExportState, initListeners,
+    outputDir, ollamaDir, manifestDir, fusedDir, startExport, clearAll: clearExportState, initListeners,
     pathWarning,
   } = useExportStore();
 
@@ -52,14 +53,40 @@ export function ExportPage() {
     initListeners: initGgufListeners,
   } = useExportGgufStore();
 
+  // MLX export store
+  const {
+    isExporting: isMlxExporting,
+    result: mlxResult,
+    logs: mlxLogs,
+    progress: mlxProgress,
+    outputDir: mlxOutputDir,
+    sizeMb: mlxSizeMb,
+    startExport: startMlxExport,
+    clearAll: clearMlxState,
+    initListeners: initMlxListeners,
+  } = useExportMlxStore();
+
   const [modelName, setModelName] = useState("");
   const [baseModel, setBaseModel] = useState("");
   const [quantization, setQuantization] = useState("");
   const [quantEdited, setQuantEdited] = useState(false);
+  const [keepFused, setKeepFused] = useState(true);
   const [copied, setCopied] = useState(false);
   const [ggufCopied, setGgufCopied] = useState(false);
+  const [mlxCopied, setMlxCopied] = useState(false);
   const ggufLogRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const mlxLogRef = useRef<HTMLDivElement>(null);
+
+  // E-6: mlx-lm.server state
+  interface ServerInfo { running: boolean; pid?: number; port: number; model_path: string; endpoint: string; }
+  const [serverStatus, setServerStatus] = useState<ServerInfo | null>(null);
+  const [serverStarting, setServerStarting] = useState(false);
+  const [serverError, setServerError] = useState("");
+  const [endpointCopied, setEndpointCopied] = useState(false);
+
+  // E-7: connection guide
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // i18n labels for export pipeline steps
   const EXPORT_STEPS = EXPORT_STEP_KEYS.map((key) => ({
@@ -99,7 +126,20 @@ export function ExportPage() {
   useEffect(() => {
     void initListeners();
     void initGgufListeners();
-  }, [initListeners, initGgufListeners]);
+    void initMlxListeners();
+  }, [initListeners, initGgufListeners, initMlxListeners]);
+
+  // E-6: Check server status on mount and periodically
+  useEffect(() => {
+    const checkServer = () => {
+      invoke<ServerInfo>("get_mlx_server_status")
+        .then((info) => setServerStatus(info.running ? info : null))
+        .catch(() => setServerStatus(null));
+    };
+    checkServer();
+    const interval = setInterval(checkServer, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     invoke<OllamaPathInfo>("get_ollama_path_info")
@@ -193,6 +233,8 @@ export function ExportPage() {
     if (storeProjectId && storeProjectId !== currentProject?.id) clearExportState();
     const ggufProjectId = useExportGgufStore.getState().activeProjectId;
     if (ggufProjectId && ggufProjectId !== currentProject?.id) clearGgufState();
+    const mlxProjectId = useExportMlxStore.getState().activeProjectId;
+    if (mlxProjectId && mlxProjectId !== currentProject?.id) clearMlxState();
     if (currentProject) loadAdapters();
   }, [currentProject?.id]);
 
@@ -204,6 +246,10 @@ export function ExportPage() {
   useEffect(() => {
     if (ggufLogRef.current) ggufLogRef.current.scrollTop = ggufLogRef.current.scrollHeight;
   }, [ggufLogs]);
+
+  useEffect(() => {
+    if (mlxLogRef.current) mlxLogRef.current.scrollTop = mlxLogRef.current.scrollHeight;
+  }, [mlxLogs]);
 
   // Auto-trigger E-2 verification when export succeeds
   useEffect(() => {
@@ -246,6 +292,7 @@ export function ExportPage() {
         model: baseModel,
         adapterPath: selectedAdapter || null,
         quantization,
+        keepFused: keepFused || undefined,
         lang: i18n.language,
       });
     } catch (e) {
@@ -276,6 +323,48 @@ export function ExportPage() {
       const store = useExportGgufStore.getState();
       store.clearAll();
       store.setResult(`Error: ${String(e)}`);
+    }
+  };
+
+  // MLX export handler
+  const handleMlxExport = async () => {
+    if (!currentProject || !baseModel || !selectedAdapter) return;
+    try {
+      await initMlxListeners();
+      startMlxExport(currentProject.id);
+      await invoke("export_to_mlx", {
+        projectId: currentProject.id,
+        model: baseModel,
+        adapterPath: selectedAdapter || null,
+        lang: i18n.language,
+      });
+    } catch (e) {
+      const store = useExportMlxStore.getState();
+      store.clearAll();
+      store.setResult(`Error: ${String(e)}`);
+    }
+  };
+
+  // E-6: Server handlers
+  const handleStartServer = async (modelPath: string) => {
+    setServerStarting(true);
+    setServerError("");
+    try {
+      const info = await invoke<ServerInfo>("start_mlx_server", { modelPath });
+      setServerStatus(info);
+    } catch (e) {
+      setServerError(String(e));
+    } finally {
+      setServerStarting(false);
+    }
+  };
+
+  const handleStopServer = async () => {
+    try {
+      await invoke("stop_mlx_server");
+      setServerStatus(null);
+    } catch (e) {
+      setServerError(String(e));
     }
   };
 
@@ -601,11 +690,24 @@ export function ExportPage() {
             </div>
           )}
 
+          {/* E-5: Keep fused MLX model option */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={keepFused}
+              onChange={(e) => setKeepFused(e.target.checked)}
+              disabled={isExporting || isMlxExporting}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary disabled:opacity-50"
+            />
+            <span className="text-sm text-foreground">{t("keepFused.label")}</span>
+            <span className="text-[10px] text-muted-foreground">({t("keepFused.hint")})</span>
+          </label>
+
           <button
             onClick={handleExportWithValidation}
-            disabled={isExporting || isGgufExporting || !modelName.trim() || !baseModel.trim() || !quantization || adapters.length === 0 || ollamaInstalled === false}
+            disabled={isExporting || isGgufExporting || isMlxExporting || !modelName.trim() || !baseModel.trim() || !quantization || adapters.length === 0 || ollamaInstalled === false}
             className={`flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
-              isExporting || isGgufExporting || !modelName.trim() || !baseModel.trim() || !quantization || adapters.length === 0 || ollamaInstalled === false
+              isExporting || isGgufExporting || isMlxExporting || !modelName.trim() || !baseModel.trim() || !quantization || adapters.length === 0 || ollamaInstalled === false
                 ? "bg-primary/50 text-primary-foreground/70 cursor-not-allowed"
                 : "bg-primary text-primary-foreground hover:bg-primary/90"
             }`}
@@ -718,77 +820,99 @@ export function ExportPage() {
             </div>
           )}
           {result && !isExporting && isSuccess && (
-            <div className="rounded-lg border border-success/30 bg-success/10 p-4 space-y-3">
+            <div className="rounded-xl border border-success/40 bg-success/[0.05] p-5 space-y-5 shadow-sm">
               {/* Row 1: Success title + open folder button */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 size={18} className="text-success shrink-0" />
-                  <span className="text-sm font-medium text-success">{t("ollama.success")}</span>
+                  <CheckCircle2 size={20} className="text-success shrink-0" />
+                  <span className="text-base font-bold text-success">{t("ollama.success")}</span>
                 </div>
-                {(ollamaDir || manifestDir || outputDir) && (
+                {(fusedDir || outputDir || manifestDir || ollamaDir) && (
                   <button
-                    onClick={() => invoke("open_adapter_folder", { adapterPath: ollamaDir || manifestDir || outputDir })}
-                    className="flex items-center gap-1 text-[11px] text-success hover:text-success/80 transition-colors"
+                    onClick={() => invoke("open_adapter_folder", { adapterPath: fusedDir || outputDir || manifestDir || ollamaDir })}
+                    className="flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success hover:bg-success/20 transition-colors"
                   >
-                    <FolderOpen size={12} />
+                    <FolderOpen size={14} />
                     {tc("openFolder")}
                   </button>
                 )}
               </div>
               {/* Path details */}
-              <div className="space-y-2">
+              <div className="overflow-hidden rounded-lg border border-border bg-card divide-y divide-border">
                 {outputDir && (
-                  <div className="rounded-md bg-background/30 border border-success/10 px-3 py-2 space-y-1">
-                    <p className="text-[10px] text-success/50 font-medium uppercase tracking-wide">{t("ollama.outputLocation")}</p>
-                    <code className="text-[11px] text-success/70 font-mono break-all">{outputDir}</code>
+                  <div className="p-3.5 space-y-1.5 hover:bg-muted/30 transition-colors">
+                    <p className="text-xs font-semibold text-foreground/80 tracking-wide">{t("ollama.outputLocation")}</p>
+                    <code className="block rounded bg-muted/50 px-2.5 py-1.5 text-sm text-muted-foreground font-mono break-all border border-border/50">{outputDir}</code>
                   </div>
                 )}
 
                 {ollamaDir && (
-                  <div className="rounded-md bg-background/30 border border-success/10 px-3 py-2 space-y-1">
+                  <div className="p-3.5 space-y-1.5 hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-2">
-                      <p className="text-[10px] text-success/50 font-medium uppercase tracking-wide">{t("ollama.ollamaModelsDir")}</p>
+                      <p className="text-xs font-semibold text-foreground/80 tracking-wide">{t("ollama.ollamaModelsDir")}</p>
                       {ollamaPathType && (
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${ollamaPathType === "custom" ? "bg-tag-trained/15 text-tag-trained" : "bg-muted text-muted-foreground"}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${ollamaPathType === "custom" ? "bg-tag-trained/15 text-tag-trained border border-tag-trained/20" : "bg-muted text-muted-foreground border border-border"}`}>
                           {ollamaPathType === "custom" ? t("ollama.pathCustom") : t("ollama.pathDefault")}
                         </span>
                       )}
                     </div>
-                    <code className="text-[11px] text-success/70 font-mono break-all">{ollamaDir}</code>
+                    <code className="block rounded bg-muted/50 px-2.5 py-1.5 text-sm text-muted-foreground font-mono break-all border border-border/50">{ollamaDir}</code>
                   </div>
                 )}
 
                 {manifestDir && (
-                  <div className="rounded-md bg-background/30 border border-success/10 px-3 py-2 space-y-1">
-                    <p className="text-[10px] text-success/50 font-medium uppercase tracking-wide">{t("ollama.manifestDir")}</p>
-                    <code className="text-[11px] text-success/70 font-mono break-all">{manifestDir}</code>
+                  <div className="p-3.5 space-y-1.5 hover:bg-muted/30 transition-colors">
+                    <p className="text-xs font-semibold text-foreground/80 tracking-wide">{t("ollama.manifestDir")}</p>
+                    <code className="block rounded bg-muted/50 px-2.5 py-1.5 text-sm text-muted-foreground font-mono break-all border border-border/50">{manifestDir}</code>
+                  </div>
+                )}
+
+                {fusedDir && (
+                  <div className="p-3.5 space-y-1.5 hover:bg-primary/[0.02] transition-colors bg-primary/[0.02]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-semibold text-primary/90 tracking-wide">{t("fusedDir.label")}</p>
+                        <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary tracking-wide hidden sm:inline-block">MLX / LM Studio</span>
+                      </div>
+                      <button
+                        onClick={() => invoke("open_adapter_folder", { adapterPath: fusedDir })}
+                        className="flex items-center gap-1 text-xs font-medium text-primary/70 hover:text-primary transition-colors"
+                      >
+                        <FolderOpen size={12} />
+                        {t("fusedDir.openFolder")}
+                      </button>
+                    </div>
+                    <code className="block rounded bg-background px-2.5 py-1.5 text-sm text-primary/80 font-mono break-all border border-primary/20 shadow-sm">{fusedDir}</code>
                   </div>
                 )}
               </div>
               {/* Row 2: Run hint for beginners */}
-              <p className="text-xs text-success">{t("ollama.successRunHint")}</p>
-              {/* Row 3: Command with copy button */}
-              <div className="flex items-center gap-2 rounded-md bg-background/50 border border-success/20 px-3 py-2">
-                <code className="flex-1 text-xs text-success font-mono select-all">
-                  ollama run {successModelName}
-                </code>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`ollama run ${successModelName}`);
-                    setCmdCopied(true);
-                    setTimeout(() => setCmdCopied(false), 3000);
-                  }}
-                  className="shrink-0 rounded p-1 text-success/50 hover:text-success hover:bg-success/10 transition-colors"
-                  title={tc("copyLog")}
-                >
-                  {cmdCopied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
-                </button>
+              <div className="pt-2">
+                <p className="text-sm font-medium text-success mb-2.5">{t("ollama.successRunHint")}</p>
+                {/* Row 3: Command with copy button */}
+                <div className="flex items-center gap-3 rounded-lg bg-black/90 dark:bg-black border border-success/30 px-4 py-3 shadow-inner">
+                  <span className="text-success/50 select-none font-mono">$</span>
+                  <code className="flex-1 text-sm text-green-400 font-mono select-all">
+                    ollama run {successModelName}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`ollama run ${successModelName}`);
+                      setCmdCopied(true);
+                      setTimeout(() => setCmdCopied(false), 3000);
+                    }}
+                    className="shrink-0 rounded p-1.5 text-success/50 hover:text-success hover:bg-success/20 transition-colors"
+                    title={tc("copyLog")}
+                  >
+                    {cmdCopied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
+                  </button>
+                </div>
               </div>
 
               {/* E-2: Regression verification */}
               {verifyState !== "idle" && (
-                <div className={`rounded-md border px-3 py-2 space-y-1 text-[11px] ${
-                  verifyState === "running" ? "border-border bg-background/30" :
+                <div className={`mt-2 rounded-lg border px-4 py-3 space-y-2 text-xs ${
+                  verifyState === "running" ? "border-border bg-background/50" :
                   verifyState === "ok" ? "border-success/30 bg-success/5" :
                   "border-destructive/30 bg-destructive/5"
                 }`}>
@@ -927,6 +1051,236 @@ export function ExportPage() {
         {ggufResult && !isGgufExporting && ggufResult.startsWith("Error") && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400 whitespace-pre-wrap">
             {ggufResult}
+          </div>
+        )}
+      </div>
+
+      {/* ═══════ MLX Export Section ═══════ */}
+      <div className="rounded-xl border border-border bg-card/50 p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-foreground">{t("mlx.title")}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{t("mlx.description")}</p>
+        </div>
+
+        <button
+          onClick={handleMlxExport}
+          disabled={isMlxExporting || isExporting || isGgufExporting || !selectedAdapter || !baseModel}
+          className={`flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
+            isMlxExporting || isExporting || isGgufExporting || !selectedAdapter || !baseModel
+              ? "bg-primary/40 text-primary-foreground/50 cursor-not-allowed"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+          }`}
+        >
+          <Upload size={16} />
+          {isMlxExporting ? t("mlx.exporting") : t("mlx.exportButton")}
+        </button>
+
+        {/* MLX Progress */}
+        {(isMlxExporting || mlxLogs.length > 0) && (
+          <div className="space-y-2">
+            {isMlxExporting && mlxProgress && (
+              <div className="rounded-md border border-border bg-background/40 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 size={12} className="animate-spin text-primary shrink-0" />
+                  <p className="text-xs text-muted-foreground whitespace-pre-line">{mlxProgress}</p>
+                </div>
+              </div>
+            )}
+            {mlxLogs.length > 0 && (
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">{t("exportLog")}</span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(mlxLogs.join("\n")); setMlxCopied(true); setTimeout(() => setMlxCopied(false), 3000); }}
+                    className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent"
+                  >
+                    {mlxCopied ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+                    {mlxCopied ? tc("copied") : tc("copyLog")}
+                  </button>
+                </div>
+                <div ref={mlxLogRef} className="h-[160px] overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-xs leading-relaxed">
+                  {mlxLogs.map((line, i) => (
+                    <div key={i} className={
+                      line.includes("!!!") || line.includes("Error") ? "text-red-400" :
+                      line.includes("---") || line.includes("exported") ? "text-success" :
+                      "text-foreground"
+                    }>{line}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MLX Result */}
+        {mlxResult && !isMlxExporting && mlxResult.startsWith("__success__") && (
+          <div className="rounded-lg border border-success/30 bg-success/10 p-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={15} className="text-success shrink-0" />
+                <span className="text-sm font-medium text-success">{t("mlx.success")}</span>
+              </div>
+              {mlxOutputDir && (
+                <button
+                  onClick={() => invoke("open_adapter_folder", { adapterPath: mlxOutputDir })}
+                  className="flex items-center gap-1 text-[11px] text-success/60 hover:text-success transition-colors"
+                >
+                  <FolderOpen size={12} />
+                  {t("mlx.openFolder")}
+                </button>
+              )}
+            </div>
+            {mlxOutputDir && (
+              <p className="text-xs text-success/70">
+                {t("mlx.successHint")} <span className="font-mono break-all">{mlxOutputDir}</span>
+              </p>
+            )}
+            {mlxSizeMb > 0 && (
+              <p className="text-[11px] text-success/50">{t("mlx.sizeHint", { size: mlxSizeMb })}</p>
+            )}
+          </div>
+        )}
+        {mlxResult && !isMlxExporting && mlxResult.startsWith("Error") && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400 whitespace-pre-wrap">
+            {mlxResult}
+          </div>
+        )}
+      </div>
+
+      {/* ═══════ Local Inference Server Section ═══════ */}
+      <div className="rounded-xl border border-border bg-card/50 p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-foreground">{t("server.title")}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{t("server.description")}</p>
+        </div>
+
+        {/* No MLX model available */}
+        {!mlxOutputDir && !fusedDir && (
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-background/30 px-4 py-3">
+            <AlertCircle size={14} className="text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground">{t("server.noModel")}</p>
+          </div>
+        )}
+
+        {/* Server controls */}
+        {(mlxOutputDir || fusedDir) && (
+          <div className="space-y-3">
+            {serverStatus ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" /></span>
+                    <span className="text-sm font-medium text-success">{t("server.running")}</span>
+                  </div>
+                  <button
+                    onClick={handleStopServer}
+                    className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20 transition-colors"
+                  >
+                    <Square size={12} />
+                    {t("server.stopButton")}
+                  </button>
+                </div>
+
+                {/* Endpoint display with copy */}
+                <div className="rounded-md bg-background/50 border border-success/20 px-3 py-2 space-y-1">
+                  <p className="text-[10px] text-success/50 font-medium uppercase tracking-wide">{t("server.endpoint")}</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs text-success font-mono select-all break-all">{serverStatus.endpoint}</code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(serverStatus.endpoint);
+                        setEndpointCopied(true);
+                        setTimeout(() => setEndpointCopied(false), 3000);
+                      }}
+                      className="shrink-0 rounded p-1 text-success/50 hover:text-success hover:bg-success/10 transition-colors"
+                    >
+                      {endpointCopied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleStartServer(mlxOutputDir || fusedDir)}
+                disabled={serverStarting}
+                className={`flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
+                  serverStarting
+                    ? "bg-primary/40 text-primary-foreground/50 cursor-not-allowed"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                }`}
+              >
+                {serverStarting ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                {serverStarting ? t("server.starting") : t("server.startButton")}
+              </button>
+            )}
+
+            {serverError && (
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                {t("server.error")}: {serverError}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ═══════ Connection Guide Section ═══════ */}
+      <div className="rounded-xl border border-border bg-card/50">
+        <button
+          onClick={() => setGuideOpen(!guideOpen)}
+          className="flex w-full items-center justify-between p-5"
+        >
+          <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+            <BookOpen size={18} />
+            {t("guide.title")}
+          </h2>
+          {guideOpen ? <ChevronDown size={16} className="text-muted-foreground" /> : <ChevronRight size={16} className="text-muted-foreground" />}
+        </button>
+        {guideOpen && (
+          <div className="border-t border-border p-5 space-y-4">
+            {/* Ollama guide */}
+            {isSuccess && successModelName && (
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold text-foreground">{t("guide.ollamaTitle")}</h3>
+                <pre className="whitespace-pre-wrap rounded-md bg-background/50 border border-border px-3 py-2 text-xs text-muted-foreground font-mono leading-relaxed">
+                  {t("guide.ollamaSteps", { modelName: successModelName })}
+                </pre>
+              </div>
+            )}
+
+            {/* MLX / LM Studio guide */}
+            {(mlxOutputDir || fusedDir) && (
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold text-foreground">{t("guide.mlxTitle")}</h3>
+                <pre className="whitespace-pre-wrap rounded-md bg-background/50 border border-border px-3 py-2 text-xs text-muted-foreground font-mono leading-relaxed">
+                  {t("guide.mlxSteps")}
+                </pre>
+              </div>
+            )}
+
+            {/* Server guide */}
+            {(mlxOutputDir || fusedDir) && (
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold text-foreground">{t("guide.serverTitle")}</h3>
+                <pre className="whitespace-pre-wrap rounded-md bg-background/50 border border-border px-3 py-2 text-xs text-muted-foreground font-mono leading-relaxed">
+                  {t("guide.serverSteps", { endpoint: serverStatus?.endpoint || `http://localhost:8080/v1` })}
+                </pre>
+              </div>
+            )}
+
+            {/* GGUF guide */}
+            {ggufResult && ggufResult.startsWith("__success__") && (
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold text-foreground">{t("guide.ggufTitle")}</h3>
+                <pre className="whitespace-pre-wrap rounded-md bg-background/50 border border-border px-3 py-2 text-xs text-muted-foreground font-mono leading-relaxed">
+                  {t("guide.ggufSteps")}
+                </pre>
+              </div>
+            )}
+
+            {/* Empty state: no exports yet */}
+            {!isSuccess && !mlxOutputDir && !fusedDir && !(ggufResult && ggufResult.startsWith("__success__")) && (
+              <p className="text-xs text-muted-foreground/60">{t("mlx.description")}</p>
+            )}
           </div>
         )}
       </div>

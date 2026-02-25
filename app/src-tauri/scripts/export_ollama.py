@@ -441,6 +441,8 @@ def main():
     parser.add_argument("--quantization", default="q4", choices=["q4", "q8", "f16"])
     parser.add_argument("--ollama-models-dir", default="")
     parser.add_argument("--ollama-bin", default="", help="Full path to ollama binary")
+    parser.add_argument("--keep-fused", action="store_true", default=False,
+                        help="Keep the intermediate fused model directory for LM Studio / mlx-lm.server use")
     add_lang_arg(parser)
     args = parser.parse_args()
 
@@ -554,9 +556,14 @@ def _run(args):
             ollama_models, "manifests", "registry.ollama.ai", "library", args.model_name
         )
 
-        # Auto-cleanup intermediate fused files after successful export.
-        # The model is now stored in Ollama's own directory; these are no longer needed.
-        if os.path.isdir(fused_dir):
+        # Auto-cleanup intermediate fused files after successful export,
+        # unless the user chose to keep them for LM Studio / mlx-lm.server.
+        fused_kept = False
+        if args.keep_fused and os.path.isdir(fused_dir):
+            fused_kept = True
+            emit("progress", step="cleanup",
+                 desc=t("export.fused_kept"))
+        elif os.path.isdir(fused_dir):
             try:
                 shutil.rmtree(fused_dir, ignore_errors=True)
                 emit("progress", step="cleanup",
@@ -564,11 +571,15 @@ def _run(args):
             except Exception:
                 pass
 
-        emit("complete",
-             model_name=args.model_name,
-             output_dir=args.output_dir,
-             ollama_dir=ollama_models,
-             manifest_dir=manifest_dir)
+        complete_payload = dict(
+            model_name=args.model_name,
+            output_dir=args.output_dir,
+            ollama_dir=ollama_models,
+            manifest_dir=manifest_dir,
+        )
+        if fused_kept:
+            complete_payload["fused_dir"] = fused_dir
+        emit("complete", **complete_payload)
     elif isinstance(result, tuple):
         _, stderr = result
         friendly = _interpret_ollama_stderr(stderr)

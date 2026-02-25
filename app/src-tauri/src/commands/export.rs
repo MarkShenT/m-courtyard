@@ -271,6 +271,7 @@ pub async fn export_to_ollama(
     model: String,
     adapter_path: Option<String>,
     quantization: Option<String>,
+    keep_fused: Option<bool>,
     lang: Option<String>,
 ) -> Result<(), String> {
     let executor = PythonExecutor::default();
@@ -345,22 +346,27 @@ pub async fn export_to_ollama(
     }
 
     let ollama_models_dir_str = ollama_models_dir.to_string_lossy().to_string();
+    let keep_fused_flag = keep_fused.unwrap_or(false);
 
     let pid = project_id.clone();
     tokio::spawn(async move {
         let mut cmd = tokio::process::Command::new(&python_bin);
-        cmd.args([
-                "-u",
-                script.to_string_lossy().as_ref(),
-                "--model", &model,
-                "--adapter-path", &adapter_path,
-                "--model-name", &model_name,
-                "--output-dir", &output_dir.to_string_lossy(),
-                "--quantization", &quant,
-                "--ollama-models-dir", &ollama_models_dir_str,
-                "--ollama-bin", &ollama_bin_str,
-                "--lang", &lang.unwrap_or_else(|| "en".to_string()),
-            ])
+        let mut args_vec = vec![
+            "-u".to_string(),
+            script.to_string_lossy().to_string(),
+            "--model".to_string(), model,
+            "--adapter-path".to_string(), adapter_path,
+            "--model-name".to_string(), model_name,
+            "--output-dir".to_string(), output_dir.to_string_lossy().to_string(),
+            "--quantization".to_string(), quant,
+            "--ollama-models-dir".to_string(), ollama_models_dir_str.clone(),
+            "--ollama-bin".to_string(), ollama_bin_str,
+            "--lang".to_string(), lang.unwrap_or_else(|| "en".to_string()),
+        ];
+        if keep_fused_flag {
+            args_vec.push("--keep-fused".to_string());
+        }
+        cmd.args(&args_vec)
             .env("PYTHONUNBUFFERED", "1")
             .env("OLLAMA_MODELS", &ollama_models_dir_str)
             .stdout(std::process::Stdio::piped())
@@ -477,4 +483,230 @@ pub async fn export_to_gguf(
     });
 
     Ok(())
+}
+
+// ── MLX model export (fuse-only, no Ollama/GGUF) ─────────────────────────────
+
+#[tauri::command]
+pub async fn export_to_mlx(
+    app: tauri::AppHandle,
+    project_id: String,
+    model: String,
+    adapter_path: Option<String>,
+    lang: Option<String>,
+) -> Result<(), String> {
+    let executor = PythonExecutor::default();
+    if !executor.is_ready() {
+        return Err("Python environment is not ready.".into());
+    }
+
+    let scripts_dir = PythonExecutor::scripts_dir();
+    let script = scripts_dir.join("export_mlx.py");
+    if !script.exists() {
+        return Err(format!("MLX export script not found at: {}", script.display()));
+    }
+
+    let dir_manager = ProjectDirManager::new();
+    let project_path = dir_manager.project_path(&project_id);
+
+    let adapter_path = if let Some(ap) = adapter_path {
+        if !std::path::Path::new(&ap).exists() {
+            return Err(format!("Adapter path not found: {}", ap));
+        }
+        ap
+    } else {
+        let adapters_dir = project_path.join("adapters");
+        std::fs::read_dir(&adapters_dir)
+            .ok()
+            .and_then(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                    .max_by_key(|e| e.metadata().ok().and_then(|m| m.modified().ok()))
+                    .map(|e| e.path().to_string_lossy().to_string())
+            })
+            .ok_or_else(|| "No trained adapter found. Complete training first.".to_string())?
+    };
+
+    let output_dir = project_path.join("export").join("mlx");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| format!("Failed to create MLX export dir: {}", e))?;
+
+    let python_bin = executor.python_bin().clone();
+    let pid = project_id.clone();
+    tokio::spawn(async move {
+        match tokio::process::Command::new(&python_bin)
+            .args([
+                "-u",
+                script.to_string_lossy().as_ref(),
+                "--model", &model,
+                "--adapter-path", &adapter_path,
+                "--output-dir", &output_dir.to_string_lossy(),
+                "--lang", &lang.unwrap_or_else(|| "en".to_string()),
+            ])
+            .env("PYTHONUNBUFFERED", "1")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => run_python_and_emit(app, child, "mlx", pid, 1800).await,
+            Err(e) => {
+                let _ = app.emit("mlx:error", serde_json::json!({
+                    "message": e.to_string(), "project_id": pid
+                }));
+            }
+        }
+    });
+
+    Ok(())
+}
+
+// ── E-6: mlx-lm.server management ────────────────────────────────────────────
+
+use std::sync::Mutex;
+
+#[derive(Default, serde::Serialize, serde::Deserialize, Clone)]
+pub struct MlxServerInfo {
+    pub running: bool,
+    pub pid: Option<u32>,
+    pub port: u16,
+    pub model_path: String,
+    pub endpoint: String,
+}
+
+#[derive(Default)]
+pub struct MlxServerState(pub Mutex<Option<(u32, u16, String)>>); // (pid, port, model_path)
+
+fn is_process_alive(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+pub async fn start_mlx_server(
+    state: tauri::State<'_, MlxServerState>,
+    model_path: String,
+    port: Option<u16>,
+) -> Result<MlxServerInfo, String> {
+    let port = port.unwrap_or(8080);
+
+    // Check if already running
+    {
+        let guard = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some((pid, p, _)) = guard.as_ref() {
+            if is_process_alive(*pid) {
+                return Err(format!("Server already running on port {} (pid {})", p, pid));
+            }
+        }
+    }
+
+    // Verify model path exists
+    if !std::path::Path::new(&model_path).is_dir() {
+        return Err(format!("Model directory not found: {}", model_path));
+    }
+
+    let executor = PythonExecutor::default();
+    if !executor.is_ready() {
+        return Err("Python environment is not ready.".into());
+    }
+
+    let python_bin = executor.python_bin().clone();
+
+    let child = std::process::Command::new(&python_bin)
+        .args([
+            "-m", "mlx_lm.server",
+            "--model", &model_path,
+            "--port", &port.to_string(),
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to start mlx-lm server: {}", e))?;
+
+    let pid = child.id();
+
+    // Wait briefly and check if process is still alive (catches immediate failures)
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    if !is_process_alive(pid) {
+        return Err("Server process exited immediately. Port may be in use or model path is invalid.".into());
+    }
+
+    // Try a quick health check via TCP connect (avoids reqwest dependency)
+    let endpoint = format!("http://localhost:{}/v1", port);
+    let port_ready = {
+        let addr = format!("127.0.0.1:{}", port);
+        let mut ready = false;
+        for _ in 0..16 {
+            if std::net::TcpStream::connect(&addr).is_ok() {
+                ready = true;
+                break;
+            }
+            if !is_process_alive(pid) { break; }
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+        ready
+    };
+
+    if !port_ready && !is_process_alive(pid) {
+        return Err("Server process died during startup.".into());
+    }
+
+    // Store server info
+    {
+        let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+        *guard = Some((pid, port, model_path.clone()));
+    }
+
+    Ok(MlxServerInfo {
+        running: true,
+        pid: Some(pid),
+        port,
+        model_path,
+        endpoint,
+    })
+}
+
+#[tauri::command]
+pub async fn stop_mlx_server(
+    state: tauri::State<'_, MlxServerState>,
+) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some((pid, _, _)) = guard.take() {
+        let _ = std::process::Command::new("kill")
+            .arg(pid.to_string())
+            .status();
+        // Give it a moment, then force kill if needed
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        if is_process_alive(pid) {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .status();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_mlx_server_status(
+    state: tauri::State<'_, MlxServerState>,
+) -> Result<MlxServerInfo, String> {
+    let guard = state.0.lock().map_err(|e| e.to_string())?;
+    match guard.as_ref() {
+        Some((pid, port, model_path)) => {
+            let alive = is_process_alive(*pid);
+            Ok(MlxServerInfo {
+                running: alive,
+                pid: if alive { Some(*pid) } else { None },
+                port: *port,
+                model_path: model_path.clone(),
+                endpoint: if alive { format!("http://localhost:{}/v1", port) } else { String::new() },
+            })
+        }
+        None => Ok(MlxServerInfo::default()),
+    }
 }

@@ -95,5 +95,52 @@
     "failed": "Verification failed",
     "preview": "Response preview:",
     "retry": "Retry"
+  },
+  "keepFused": {
+    "label": "Also keep MLX model (for LM Studio)",
+    "hint": "Preserves the fused model directory alongside the Ollama export"
+  },
+  "fusedDir": {
+    "label": "MLX model directory (LM Studio compatible)",
+    "openFolder": "Open in Finder"
+  },
+  "mlx": {
+    "title": "Export as MLX Model",
+    "description": "Export as an MLX safetensors model. Can be loaded directly by LM Studio (best performance on Mac) or served via local API.",
+    "exportButton": "Export as MLX Model",
+    "exporting": "Exporting...",
+    "success": "MLX model exported successfully!",
+    "successHint": "Model saved to:",
+    "sizeHint": "Size: {{size}} MB",
+    "openFolder": "Open Folder",
+    "pipeline": {
+      "check": "Prepare",
+      "resolve": "Resolve Model",
+      "fuse": "Fuse Adapter"
+    }
+  },
+  "server": {
+    "title": "Local Inference Server",
+    "description": "Start an OpenAI-compatible API server from the exported MLX model. Any tool that supports the OpenAI API can connect.",
+    "startButton": "Start Server",
+    "stopButton": "Stop Server",
+    "starting": "Starting...",
+    "running": "Running",
+    "stopped": "Stopped",
+    "endpoint": "API Endpoint",
+    "portLabel": "Port",
+    "noModel": "Export an MLX model first to start the server.",
+    "error": "Failed to start server"
+  },
+  "guide": {
+    "title": "How to Use",
+    "ollamaTitle": "Ollama Model",
+    "ollamaSteps": "1. Open terminal: ollama run {{modelName}}\n2. Or connect via OpenWebUI / AnythingLLM / Chatbox:\n   Settings → Ollama → URL: http://localhost:11434",
+    "mlxTitle": "MLX Model (LM Studio)",
+    "mlxSteps": "1. Open LM Studio → Load Model → Browse\n2. Select the exported directory\n3. Start chatting — native MLX performance on Mac",
+    "serverTitle": "Local API Server (mlx-lm)",
+    "serverSteps": "1. Click \"Start Server\" above\n2. Connect any OpenAI-compatible tool:\n   Base URL: {{endpoint}}\n3. Works with: OpenWebUI, AnythingLLM, Chatbox, curl, etc.",
+    "ggufTitle": "GGUF File",
+    "ggufSteps": "1. LM Studio: drag the .gguf file into the models folder\n2. Jan: Import Model → select the .gguf file\n3. llama.cpp: ./llama-cli -m <path_to_gguf>"
   }
 }

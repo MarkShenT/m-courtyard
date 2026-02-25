@@ -17,6 +17,7 @@ interface ExportState {
   outputDir: string;
   ollamaDir: string;
   manifestDir: string;
+  fusedDir: string;
   // Project isolation
   activeProjectId: string;
   // Path warning: configured Ollama models path is invalid, fell back to default Ollama dir
@@ -32,6 +33,7 @@ interface ExportState {
   setOutputDir: (dir: string) => void;
   setOllamaDir: (dir: string) => void;
   setManifestDir: (dir: string) => void;
+  setFusedDir: (dir: string) => void;
   setPathWarning: (w: { configuredPath: string; fallbackPath: string } | null) => void;
   clearAll: () => void;
 
@@ -52,12 +54,13 @@ export const useExportStore = create<ExportState>((set, get) => ({
   outputDir: "",
   ollamaDir: "",
   manifestDir: "",
+  fusedDir: "",
   activeProjectId: "",
   pathWarning: null,
 
   startExport: (projectId: string) => set({
     isExporting: true, result: null, exportLogs: [], currentStep: "", exportProgress: "",
-    ollamaDir: "", manifestDir: "",
+    ollamaDir: "", manifestDir: "", fusedDir: "",
     activeProjectId: projectId, pathWarning: null,
   }),
 
@@ -69,6 +72,7 @@ export const useExportStore = create<ExportState>((set, get) => ({
   setOutputDir: (dir) => set({ outputDir: dir }),
   setOllamaDir: (dir) => set({ ollamaDir: dir }),
   setManifestDir: (dir) => set({ manifestDir: dir }),
+  setFusedDir: (dir) => set({ fusedDir: dir }),
   setPathWarning: (w) => set({ pathWarning: w }),
 
   clearAll: () => set({
@@ -81,6 +85,7 @@ export const useExportStore = create<ExportState>((set, get) => ({
     outputDir: "",
     ollamaDir: "",
     manifestDir: "",
+    fusedDir: "",
     activeProjectId: "",
     pathWarning: null,
   }),
@@ -116,16 +121,18 @@ export const useExportStore = create<ExportState>((set, get) => ({
       });
       unsubs.push(u1);
 
-      const u2 = await listen<ExportEvent & { model_name?: string; output_dir?: string; ollama_dir?: string; manifest_dir?: string }>("export:complete", (e) => {
+      const u2 = await listen<ExportEvent & { model_name?: string; output_dir?: string; ollama_dir?: string; manifest_dir?: string; fused_dir?: string }>("export:complete", (e) => {
         if (!isMyProject(e.payload)) return;
         const name = (e.payload.model_name as string) || "";
         const dir = (e.payload.output_dir as string) || "";
         const ollamaDir = (e.payload.ollama_dir as string) || "";
         const manifestDir = (e.payload.manifest_dir as string) || "";
+        const fusedDir = (e.payload.fused_dir as string) || "";
         if (name) get().setModelName(name);
         if (dir) get().setOutputDir(dir);
         if (ollamaDir) get().setOllamaDir(ollamaDir);
         if (manifestDir) get().setManifestDir(manifestDir);
+        if (fusedDir) get().setFusedDir(fusedDir);
         set({ isExporting: false, currentStep: "done", exportProgress: "" });
         set({ result: `__success__:${name}` });
         get().addLog(`--- Model '${name}' created`);
