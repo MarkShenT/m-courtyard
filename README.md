@@ -17,20 +17,13 @@
 
 ---
 
-<!-- TODO: GIF 压缩与录制建议
-  建议使用工具（如 CleanShot X, Kap，或免费的 Gifski）录制一个 5~10 秒的快速展示（包括拖入文件->点击生成->开始训练）。
-  录制后如文件过大，可以使用 https://ezgif.com 压缩，尽量保持在 5MB 以下。
-  上传后，将下面的图片链接替换为你的 GIF 链接。
--->
 <div align="center">
-  <img src="docs/screenshots/dashboard.png" alt="M-Courtyard Showcase" width="800">
-  <br>
-  <em>(TODO: Replace the static image above with an engaging 10s GIF showcasing the workflow)</em>
+  <img src="docs/screenshots/0228/Dashboard.png" alt="M-Courtyard Dashboard" width="800">
 </div>
 
 <br>
 
-## 🌟 Why M-Courtyard?
+## Why M-Courtyard?
 
 M-Courtyard is a **desktop assistant** designed to demystify LLM fine-tuning. Forget about writing Python scripts, managing CUDA dependencies, or renting expensive cloud GPUs. If you have an Apple Silicon Mac, you can build your own custom AI locally.
 
@@ -39,44 +32,76 @@ M-Courtyard is a **desktop assistant** designed to demystify LLM fine-tuning. Fo
 - **Optimized for Apple MLX**: Powered by `mlx-lm`, maximizing the potential of unified memory on M1/M2/M3/M4 chips.
 - **AI-Powered Data Prep**: Automatically turn unstructured documents into high-quality instruction datasets using local reasoning models (like DeepSeek-R1 or Qwen).
 
-## ✨ Features
+## Features
 
-### 🛠 Automated Data Preparation
+### Automated Data Preparation
 - **Multi-format Import**: Drag & drop `.txt`, `.pdf`, `.docx`.
 - **Smart Segmentation**: Automatically clean and chunk documents.
 - **AI Dataset Generation**: Use local Ollama models to generate *Knowledge Q&A*, *Style Imitation*, or *Instruction Training* datasets.
 
-### 🧠 Effortless Fine-tuning (LoRA)
+### Effortless Fine-tuning (LoRA)
 - **Unified Model Hub**: Auto-detect local Ollama/HuggingFace models, or pull the latest models online (Qwen, DeepSeek, GLM, Llama, Mistral, etc.).
 - **Live Visuals**: Real-time training loss charts, ETA, and resource monitoring.
 - **Presets**: 1-click configurations (Quick / Standard / Thorough) for different needs.
 
-### 🚀 Test & Export
+### Test & Export
 - **Built-in Chat**: Test your fine-tuned adapter instantly.
 - **One-Click Ollama Export**: Merge, quantize (Q4/Q8/F16), and export straight to Ollama. Play with your model immediately.
 
-## 📸 Interface Tour
+## Interface Tour
 
-<details open>
-<summary><b>Click to preview the workflow</b></summary>
+<details>
+<summary><b>Step 1: Data Preparation</b> (Click to expand)</summary>
 <br>
-
-| Data Preparation | Training Progress |
-| :---: | :---: |
-| <img src="docs/screenshots/data-preparation.png" alt="Data Prep" width="400"> | <img src="docs/screenshots/training-progress.png" alt="Training" width="400"> |
-| **Test Model** | **Export to Ollama** |
-| <img src="docs/screenshots/test-model.png" alt="Testing" width="400"> | <img src="docs/screenshots/export-ollama.png" alt="Export" width="400"> |
-
+Import documents, auto-clean, and generate training datasets using local LLMs.
+<div align="center">
+  <img src="docs/screenshots/0228/Data Preparation_1.png" alt="Data Prep 1" width="800">
+  <br><br>
+  <img src="docs/screenshots/0228/Data Preparation_2.gif" alt="Data Prep 2" width="800">
+</div>
 </details>
 
-## ⚙️ Requirements
+<details>
+<summary><b>Step 2: Training Progress</b> (Click to expand)</summary>
+<br>
+Real-time loss curves, ETA, and progress tracking powered by Apple MLX.
+<div align="center">
+  <img src="docs/screenshots/0228/Training Progress_1.gif" alt="Training Progress 1" width="800">
+  <br><br>
+  <img src="docs/screenshots/0228/Training Progress_2.gif" alt="Training Progress 2" width="800">
+  <br><br>
+  <img src="docs/screenshots/0228/Training Progress_3.png" alt="Training Summary" width="800">
+</div>
+</details>
+
+<details>
+<summary><b>Step 3: Test Model</b> (Click to expand)</summary>
+<br>
+Built-in chat to instantly verify your fine-tuned adapter.
+<div align="center">
+  <img src="docs/screenshots/0228/Test Model.png" alt="Test Model" width="800">
+</div>
+</details>
+
+<details>
+<summary><b>Step 4: Export to Ollama</b> (Click to expand)</summary>
+<br>
+One-click merge, quantize (Q4/Q8/F16), and export directly to Ollama.
+<div align="center">
+  <img src="docs/screenshots/0228/Export to Ollama_1.png" alt="Export to Ollama 1" width="800">
+  <br><br>
+  <img src="docs/screenshots/0228/Export to Ollama_2.gif" alt="Export to Ollama 2" width="800">
+</div>
+</details>
+
+## Requirements
 
 - **OS**: macOS 14+ (Sonoma or later)
 - **Chip**: Apple Silicon (M1 / M2 / M3 / M4 series)
 - **RAM**: 16 GB+ recommended (for 7B/8B models); 8 GB works for small models (1.5B/3B)
 - **Dependencies**: [Ollama](https://ollama.com) installed and running (for AI data generation and inference)
 
-## ⚡️ Quick Start
+## Quick Start
 
 ### Download the Pre-built App (Recommended)
 1. Go to [**Releases**](https://github.com/Mcourtyard/m-courtyard/releases/latest) and download the latest `.dmg`.
@@ -111,14 +136,14 @@ pnpm tauri build
 ```
 </details>
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Frontend**: React 19 + TypeScript + TailwindCSS v4 + Vite + Zustand
 - **Desktop Framework**: Tauri 2.x (Rust)
 - **AI Core**: `mlx-lm` (Apple MLX), local Python `venv` managed automatically
 - **Storage**: SQLite + local filesystem
 
-## 🤝 Community & Support
+## Community & Support
 
 Join our community to share your fine-tuned models, get help, or suggest features!
 
@@ -126,9 +151,9 @@ Join our community to share your fine-tuned models, get help, or suggest feature
 - [GitHub Discussions](https://github.com/Mcourtyard/m-courtyard/discussions) — Feature ideas and Q&A
 - [GitHub Issues](https://github.com/Mcourtyard/m-courtyard/issues) — Bug reports
 
-If M-Courtyard helps you build your local AI, please consider giving it a ⭐!
+If M-Courtyard helps you build your local AI, please consider giving it a star on GitHub!
 
-## 📄 License
+## License
 
 M-Courtyard is open-source software licensed under the [AGPL-3.0 License](LICENSE).
 For commercial use or different licensing terms, please contact: `tuwenbo0112@gmail.com`
