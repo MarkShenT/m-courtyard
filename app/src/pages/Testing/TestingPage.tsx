@@ -513,22 +513,35 @@ export function TestingPage() {
       </div>
 
       {/* Input */}
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 relative flex items-end w-full rounded-2xl border border-input bg-background overflow-hidden focus-within:ring-1 focus-within:ring-ring shadow-sm transition-shadow">
         <textarea
+          ref={(el) => {
+            if (el) {
+              el.style.height = 'auto';
+              el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+            }
+          }}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={t("chat.placeholder")}
-          rows={3}
-          className="flex-1 min-h-[96px] resize-y rounded-md border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          rows={1}
+          style={{ minHeight: '56px', maxHeight: '200px' }}
+          className="flex-1 resize-none bg-transparent px-4 py-[18px] text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
-        <button
-          onClick={handleSend}
-          disabled={!input.trim() || isGenerating || isABRunning}
-          className="rounded-md bg-primary px-4 py-2.5 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-        >
-          <Send size={16} />
-        </button>
+        <div className="absolute right-3 bottom-3 flex items-center justify-center">
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || isGenerating || isABRunning}
+            className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
+              input.trim() && !isGenerating && !isABRunning
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-muted/50 text-muted-foreground cursor-not-allowed"
+            }`}
+          >
+            <Send size={15} className={input.trim() && !isGenerating && !isABRunning ? "-ml-[2px]" : "-ml-[2px]"} />
+          </button>
+        </div>
       </div>
 
       {/* Advanced A/B (on-demand) */}

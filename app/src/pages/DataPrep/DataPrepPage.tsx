@@ -1570,7 +1570,6 @@ export function DataPrepPage() {
                   ) : (
                     <div className="flex h-full flex-col items-center justify-center text-center">
                       <p className="text-sm font-medium text-foreground">{t("preview.noContent")}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">选择左侧文件以预览内容</p>
                     </div>
                   )}
                 </div>

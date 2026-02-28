@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.8] - 2026-02-28
 
-Comprehensive UI/UX polish release — 12 feature improvements and 19 bug fixes across all four workflow pages. Focus areas: global Tooltip system, UI consistency, export path correctness, and DataPrep layout overhaul.
+### Fixed / 修复
+- Removed redundant preview text ("Select a file on the left to preview its content") in Data Prep page. / 移除了数据准备页面多余的预览提示硬编码中文及冗余文本。
+- Redesigned the chat input field and send button in the Testing page to match mainstream AI chat interfaces with auto-resizing capability. / 重构了测试模型页面的聊天输入框与发送按钮，采用包裹式设计和自动高度调整，使其交互体验更符合主流大模型应用。
 
 ### Added
 - **Online Models Update (FEAT-013)**: Upgraded default online model lists to the latest series and locally deployable versions:
