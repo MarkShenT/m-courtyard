@@ -18,7 +18,7 @@
 ---
 
 <div align="center">
-  <img src="docs/screenshots/0228/Dashboard.png" alt="M-Courtyard Dashboard" width="800">
+  <img src="docs/screenshots/0228/training-2.gif" alt="M-Courtyard Training Showcase" width="800">
 </div>
 
 <br>
@@ -50,49 +50,29 @@ M-Courtyard is a **desktop assistant** designed to demystify LLM fine-tuning. Fo
 
 ## Interface Tour
 
-<details>
-<summary><b>Step 1: Data Preparation</b> (Click to expand)</summary>
-<br>
+### 1. Data Preparation
 Import documents, auto-clean, and generate training datasets using local LLMs.
 <div align="center">
-  <img src="docs/screenshots/0228/Data Preparation_1.png" alt="Data Prep 1" width="800">
-  <br><br>
-  <img src="docs/screenshots/0228/Data Preparation_2.gif" alt="Data Prep 2" width="800">
+  <img src="docs/screenshots/0228/data-prep-1.png" alt="Data Prep Setup" width="48%">
+  &nbsp;
+  <img src="docs/screenshots/0228/data-prep-2.gif" alt="Data Prep Generation" width="48%">
 </div>
-</details>
 
-<details>
-<summary><b>Step 2: Training Progress</b> (Click to expand)</summary>
-<br>
+### 2. Model Training
 Real-time loss curves, ETA, and progress tracking powered by Apple MLX.
 <div align="center">
-  <img src="docs/screenshots/0228/Training Progress_1.gif" alt="Training Progress 1" width="800">
-  <br><br>
-  <img src="docs/screenshots/0228/Training Progress_2.gif" alt="Training Progress 2" width="800">
-  <br><br>
-  <img src="docs/screenshots/0228/Training Progress_3.png" alt="Training Summary" width="800">
+  <img src="docs/screenshots/0228/training-1.gif" alt="Training Live Loss" width="48%">
+  &nbsp;
+  <img src="docs/screenshots/0228/training-3.png" alt="Training Summary" width="48%">
 </div>
-</details>
 
-<details>
-<summary><b>Step 3: Test Model</b> (Click to expand)</summary>
-<br>
-Built-in chat to instantly verify your fine-tuned adapter.
+### 3. Testing & Export
+Instantly chat with your fine-tuned model and export it to Ollama with 1-click quantization.
 <div align="center">
-  <img src="docs/screenshots/0228/Test Model.png" alt="Test Model" width="800">
+  <img src="docs/screenshots/0228/test-model.png" alt="Test Model" width="48%">
+  &nbsp;
+  <img src="docs/screenshots/0228/export-2.gif" alt="Export to Ollama" width="48%">
 </div>
-</details>
-
-<details>
-<summary><b>Step 4: Export to Ollama</b> (Click to expand)</summary>
-<br>
-One-click merge, quantize (Q4/Q8/F16), and export directly to Ollama.
-<div align="center">
-  <img src="docs/screenshots/0228/Export to Ollama_1.png" alt="Export to Ollama 1" width="800">
-  <br><br>
-  <img src="docs/screenshots/0228/Export to Ollama_2.gif" alt="Export to Ollama 2" width="800">
-</div>
-</details>
 
 ## Requirements
 
