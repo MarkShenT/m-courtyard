@@ -45,8 +45,7 @@ app/.git_backup/
 app/.git-backup/
 
 # ── Internal docs & history (not for public repo) ──
-docs/*
-!docs/screenshots/
+docs/
 userimg/
 history/
 
