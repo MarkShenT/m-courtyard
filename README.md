@@ -18,7 +18,7 @@
 ---
 
 <div align="center">
-  <img src="docs/screenshots/0228/training-2.gif" alt="M-Courtyard Training Showcase" width="800">
+  <img src="screenshots/0228/training-2.gif" alt="M-Courtyard Training Showcase" width="800">
 </div>
 
 <br>
@@ -27,10 +27,10 @@
 
 M-Courtyard is a **desktop assistant** designed to demystify LLM fine-tuning. Forget about writing Python scripts, managing CUDA dependencies, or renting expensive cloud GPUs. If you have an Apple Silicon Mac, you can build your own custom AI locally.
 
-- **Zero-Code Pipeline**: From raw PDF/DOCX files to a playable Ollama model in 4 easy steps.
+- **Zero-Code Pipeline**: From raw PDF/DOCX files to local datasets, MLX fine-tuning, and exportable local runtimes in 4 easy steps.
 - **100% Local & Private**: No data leaves your machine. Perfect for fine-tuning on sensitive enterprise data or personal journals.
 - **Optimized for Apple MLX**: Powered by `mlx-lm`, maximizing the potential of unified memory on M1/M2/M3/M4 chips.
-- **AI-Powered Data Prep**: Automatically turn unstructured documents into high-quality instruction datasets using local reasoning models (like DeepSeek-R1 or Qwen).
+- **AI-Powered Data Prep**: Automatically turn unstructured documents into high-quality instruction datasets using local models, or fall back to built-in rules when you do not want AI generation.
 
 ## Features
 
@@ -38,40 +38,49 @@ M-Courtyard is a **desktop assistant** designed to demystify LLM fine-tuning. Fo
 - **Multi-format Import**: Drag & drop `.txt`, `.pdf`, `.docx`.
 - **Smart Segmentation**: Automatically clean and chunk documents.
 - **AI Dataset Generation**: Use local Ollama models to generate *Knowledge Q&A*, *Style Imitation*, or *Instruction Training* datasets.
+- **Built-in Rules Mode**: Generate datasets without any external runtime when you prefer a fully self-contained workflow.
 
 ### Effortless Fine-tuning (LoRA)
-- **Unified Model Hub**: Auto-detect local Ollama/HuggingFace models, or pull the latest models online (Qwen, DeepSeek, GLM, Llama, Mistral, etc.).
+- **Unified Model Hub**: Auto-detect local HuggingFace / ModelScope / Ollama assets, or pull the latest models online (Qwen, DeepSeek, GLM, Llama, Mistral, etc.).
 - **Live Visuals**: Real-time training loss charts, ETA, and resource monitoring.
 - **Presets**: 1-click configurations (Quick / Standard / Thorough) for different needs.
 
 ### Test & Export
 - **Built-in Chat**: Test your fine-tuned adapter instantly.
 - **One-Click Ollama Export**: Merge, quantize (Q4/Q8/F16), and export straight to Ollama. Play with your model immediately.
+- **MLX Export for Local Runtimes**: Export fused MLX models that can be used with `mlx-lm.server` and loaded in LM Studio on Apple Silicon.
+
+## Local Runtime Support
+
+- **`mlx-lm` is the core engine**: training and built-in inference are powered by Apple MLX rather than Ollama.
+- **`Ollama` is currently optional but recommended**: it is used for Ollama-based AI dataset generation and one-click Ollama export.
+- **`LM Studio` is already compatible through MLX export**: exported MLX models can be loaded there today.
+- **`LM Studio` first-class in-app integration is planned for `v0.5.0`**: model discovery, download, and local OpenAI-compatible server workflows will be added as a parallel local runtime path instead of presenting Ollama as the only option.
 
 ## Interface Tour
 
 ### 1. Data Preparation
 Import documents, auto-clean, and generate training datasets using local LLMs.
 <div align="center">
-  <img src="docs/screenshots/0228/data-prep-1.png" alt="Data Prep Setup" width="48%">
+  <img src="screenshots/0228/data-prep-1.png" alt="Data Prep Setup" width="48%">
   &nbsp;
-  <img src="docs/screenshots/0228/data-prep-2.gif" alt="Data Prep Generation" width="48%">
+  <img src="screenshots/0228/data-prep-2.gif" alt="Data Prep Generation" width="48%">
 </div>
 
 ### 2. Model Training
 Real-time loss curves, ETA, and progress tracking powered by Apple MLX.
 <div align="center">
-  <img src="docs/screenshots/0228/training-1.gif" alt="Training Live Loss" width="48%">
+  <img src="screenshots/0228/training-1.gif" alt="Training Live Loss" width="48%">
   &nbsp;
-  <img src="docs/screenshots/0228/training-3.png" alt="Training Summary" width="48%">
+  <img src="screenshots/0228/training-3.png" alt="Training Summary" width="48%">
 </div>
 
 ### 3. Testing & Export
-Instantly chat with your fine-tuned model and export it to Ollama with 1-click quantization.
+Instantly chat with your fine-tuned model and export it either to Ollama or as MLX assets for LM Studio / local MLX workflows.
 <div align="center">
-  <img src="docs/screenshots/0228/test-model.png" alt="Test Model" width="48%">
+  <img src="screenshots/0228/test-model.png" alt="Test Model" width="48%">
   &nbsp;
-  <img src="docs/screenshots/0228/export-2.gif" alt="Export to Ollama" width="48%">
+  <img src="screenshots/0228/export-2.gif" alt="Export to Ollama" width="48%">
 </div>
 
 ## Requirements
@@ -79,7 +88,9 @@ Instantly chat with your fine-tuned model and export it to Ollama with 1-click q
 - **OS**: macOS 14+ (Sonoma or later)
 - **Chip**: Apple Silicon (M1 / M2 / M3 / M4 series)
 - **RAM**: 16 GB+ recommended (for 7B/8B models); 8 GB works for small models (1.5B/3B)
-- **Dependencies**: [Ollama](https://ollama.com) installed and running (for AI data generation and inference)
+- **Core Runtime**: M-Courtyard guides the local `uv` / Python / `mlx-lm` setup inside the app
+- **Optional Local Runtime**: [Ollama](https://ollama.com) installed and running if you want Ollama-based AI dataset generation or Ollama export
+- **Optional Local Runtime**: [LM Studio](https://lmstudio.ai) if you want to load exported MLX models there today; first-class in-app LM Studio integration is planned for `v0.5.0`
 
 ## Quick Start
 
