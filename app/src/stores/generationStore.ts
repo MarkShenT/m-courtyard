@@ -2,6 +2,42 @@ import { create } from "zustand";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useTaskStore } from "./taskStore";
 
+function parseGenerationCounts(text: string, fallbackSuccess: number, fallbackFail: number) {
+  let successCount = fallbackSuccess;
+  let failCount = fallbackFail;
+
+  const successPatterns = [
+    /已生成\s*(\d+)\s*条/u,
+    /已累计\s*(\d+)\s*条/u,
+    /内置数据生成完成[:：]?\s*(\d+)\s*条样本/u,
+    /Generated\s+(\d+)\s+samples?/i,
+    /Total\s+(\d+)\s+samples?/i,
+  ];
+  const failPatterns = [
+    /[（(]\s*(\d+)\s*失败/u,
+    /[（(]\s*(\d+)\s*failed/i,
+    /(\d+)\s+failed/i,
+  ];
+
+  for (const pattern of successPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      successCount = parseInt(match[1], 10);
+      break;
+    }
+  }
+
+  for (const pattern of failPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      failCount = parseInt(match[1], 10);
+      break;
+    }
+  }
+
+  return { successCount, failCount };
+}
+
 export interface GenFileEntry {
   name: string;
   sizeBytes: number;
@@ -168,11 +204,11 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
           }
         }
         const desc = e.payload.desc ?? get().genProgress;
-        // Parse success/fail counts from desc like "已生成 N 条 (M 失败)"
-        const successMatch = desc.match(/(\d+)\s*[条件]/u);
-        const failMatch = desc.match(/\((\d+)\s*失败\)/);
-        const successCount = successMatch ? parseInt(successMatch[1]) : get().genSuccessCount;
-        const failCount = failMatch ? parseInt(failMatch[1]) : get().genFailCount;
+        const { successCount, failCount } = parseGenerationCounts(
+          desc,
+          get().genSuccessCount,
+          get().genFailCount,
+        );
         set({
           genStep: step,
           genTotal: total,
@@ -191,7 +227,16 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         if (!get().generating) return;
         const msg = e.payload.message || e.payload.line || "";
         if (msg) {
-          set((s) => ({ aiLogs: [...s.aiLogs.slice(-500), msg] }));
+          const { successCount, failCount } = parseGenerationCounts(
+            msg,
+            get().genSuccessCount,
+            get().genFailCount,
+          );
+          set((s) => ({
+            aiLogs: [...s.aiLogs.slice(-500), msg],
+            genSuccessCount: successCount,
+            genFailCount: failCount,
+          }));
         }
       }
     );
@@ -208,6 +253,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
     const u3 = await listen("dataset:complete", () => {
       if (!get().generating) return;
+      const successCount = get().genSuccessCount;
       set({
         generating: false,
         genProgress: "",
@@ -219,22 +265,33 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       get()._reloadFiles?.();
       // Scroll to 1.4 datasets section after generation completes
       setTimeout(() => get()._scrollToDatasets?.(), 400);
+      import("./notificationStore").then(({ useNotificationStore }) => {
+        useNotificationStore.getState().trigger(
+          "dataset_complete",
+          "M-Courtyard",
+          `Dataset generation completed successfully. ${successCount} samples generated.`,
+        );
+      });
     });
     unlistens.push(u3);
 
     const u4 = await listen<{ message?: string; is_path_mismatch?: boolean }>("dataset:error", (e) => {
       if (!get().generating) return;
+      const errMsg = e.payload.message || "Generation failed";
       set({
         generating: false,
         genProgress: "",
         genStep: 0,
         genTotal: 0,
-        genError: e.payload.message || "Generation failed",
+        genError: errMsg,
         ollamaPathMismatch: e.payload.is_path_mismatch === true,
       });
       useTaskStore.getState().releaseTask();
       // Reload file list so historical datasets reappear after a failed generation
       get()._reloadFiles?.();
+      import("./notificationStore").then(({ useNotificationStore }) => {
+        useNotificationStore.getState().trigger("dataset_failed", "M-Courtyard", `Dataset generation failed: ${errMsg}`);
+      });
     });
     unlistens.push(u4);
 

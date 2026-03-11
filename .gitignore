@@ -48,6 +48,7 @@ app/.git-backup/
 docs/
 userimg/
 history/
+*_temp.md
 
 # ── Misc ──
 *.log

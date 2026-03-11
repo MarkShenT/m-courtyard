@@ -399,19 +399,6 @@ export function DataPrepPage() {
     return () => { unlisten?.(); };
   }, [currentProject]);
 
-  // Send macOS notification when dataset generation completes
-  useEffect(() => {
-    let unsub: (() => void) | null = null;
-    listen<{ version?: string }>("dataset:complete", () => {
-      // Notify user — generation finished
-      invoke("send_notification", {
-        title: t("notification.title"),
-        body: t("notification.datasetComplete", { count: 0 }),
-      }).catch(() => {});
-    }).then((fn) => { unsub = fn; });
-    return () => { unsub?.(); };
-  }, []);
-
   const loadFiles = async () => {
     if (!currentProject) return;
     const projectId = currentProject.id;

@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
   FolderPlus, Cpu, BookOpen, Database, Upload, Settings, HardDrive,
-  CheckCircle2, XCircle, AlertCircle,
+  CheckCircle2, XCircle, AlertCircle, Bell,
 } from "lucide-react";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { checkEnvironment, type EnvironmentStatus } from "@/services/environment";
 
@@ -32,6 +33,7 @@ export function DashboardPage() {
       .catch(console.error);
   }, [fetchProjects]);
 
+  const unreadNotificationCount = useNotificationStore((s) => s.unreadCount);
   const { ensureCurrentProject } = useProjectStore();
   const hasProjects = projects.length > 0;
 
@@ -94,13 +96,27 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          {t("common:appName")}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("common:appDescription")}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {t("common:appName")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("common:appDescription")}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate("/settings?focus=notifications")}
+          className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          title="消息提醒设置"
+        >
+          <Bell size={18} />
+          {unreadNotificationCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Status Cards */}

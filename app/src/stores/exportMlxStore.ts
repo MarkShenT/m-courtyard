@@ -97,6 +97,9 @@ export const useExportMlxStore = create<ExportMlxState>((set, get) => ({
         set({ isExporting: false, currentStep: "done", progress: "" });
         set({ result: `__success__:${dir}` });
         get().addLog(`--- MLX model exported to ${dir}`);
+        import("./notificationStore").then(({ useNotificationStore }) => {
+          useNotificationStore.getState().trigger("export_complete", "M-Courtyard", `MLX export completed.`);
+        });
       });
       unsubs.push(u2);
 
@@ -106,6 +109,9 @@ export const useExportMlxStore = create<ExportMlxState>((set, get) => ({
         set({ isExporting: false, currentStep: "", progress: "" });
         set({ result: `Error: ${msg}` });
         get().addLog(`!!! Error: ${msg}`);
+        import("./notificationStore").then(({ useNotificationStore }) => {
+          useNotificationStore.getState().trigger("export_failed", "M-Courtyard", `MLX export failed: ${msg}`);
+        });
       });
       unsubs.push(u3);
 

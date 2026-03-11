@@ -10,6 +10,7 @@ import { ExportPage } from "@/pages/Export";
 import { SettingsPage } from "@/pages/Settings";
 import { useProjectStore } from "@/stores/projectStore";
 import { useGenerationStore } from "@/stores/generationStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { useTrainingStore } from "@/stores/trainingStore";
 import { useExportStore } from "@/stores/exportStore";
 import { useExportGgufStore } from "@/stores/exportGgufStore";
@@ -20,6 +21,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 function App() {
   const { currentProject } = useProjectStore();
   const prevProjectIdRef = useRef<string | undefined>(undefined);
+  const notificationLoaded = useNotificationStore((s) => s.loaded);
+  const loadNotifications = useNotificationStore((s) => s.load);
+
+  useEffect(() => {
+    if (!notificationLoaded) loadNotifications();
+  }, [notificationLoaded, loadNotifications]);
 
   useEffect(() => {
     const pid = currentProject?.id;

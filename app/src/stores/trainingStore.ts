@@ -173,12 +173,13 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
           completedAt: Date.now(),
         });
         useTaskStore.getState().releaseTask();
-        // Send macOS notification
-        import("@tauri-apps/api/core").then(({ invoke: inv }) => {
-          inv("send_notification", {
-            title: "M-Courtyard",
-            body: event.payload.success ? "Training completed successfully!" : "Training failed.",
-          }).catch(() => {});
+        import("./notificationStore").then(({ useNotificationStore }) => {
+          const ns = useNotificationStore.getState();
+          if (event.payload.success) {
+            ns.trigger("training_complete", "M-Courtyard", "Training completed successfully!");
+          } else {
+            ns.trigger("training_failed", "M-Courtyard", "Training failed.");
+          }
         });
         // Trigger training queue to process next job
         import("./trainingQueueStore").then(({ useTrainingQueueStore }) => {

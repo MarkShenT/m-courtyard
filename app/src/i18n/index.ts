@@ -10,6 +10,7 @@ import enDataPrep from "./locales/en/dataPrep.json";
 import enSettings from "./locales/en/settings.json";
 import enTesting from "./locales/en/testing.json";
 import enExport from "./locales/en/export.json";
+import enNotification from "./locales/en/notification.json";
 import zhCommon from "./locales/zh-CN/common.json";
 import zhProject from "./locales/zh-CN/project.json";
 import zhNav from "./locales/zh-CN/nav.json";
@@ -18,6 +19,7 @@ import zhDataPrep from "./locales/zh-CN/dataPrep.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhTesting from "./locales/zh-CN/testing.json";
 import zhExport from "./locales/zh-CN/export.json";
+import zhNotification from "./locales/zh-CN/notification.json";
 
 const resources = {
   en: {
@@ -29,6 +31,7 @@ const resources = {
     settings: enSettings,
     testing: enTesting,
     export: enExport,
+    notification: enNotification,
   },
   "zh-CN": {
     common: zhCommon,
@@ -39,6 +42,7 @@ const resources = {
     settings: zhSettings,
     testing: zhTesting,
     export: zhExport,
+    notification: zhNotification,
   },
 };
 
@@ -49,7 +53,7 @@ i18n
     resources,
     fallbackLng: "en",
     defaultNS: "common",
-    ns: ["common", "project", "nav", "training", "dataPrep", "settings", "testing", "export"],
+    ns: ["common", "project", "nav", "training", "dataPrep", "settings", "testing", "export", "notification"],
     interpolation: {
       escapeValue: false,
     },

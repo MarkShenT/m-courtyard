@@ -136,6 +136,9 @@ export const useExportStore = create<ExportState>((set, get) => ({
         set({ isExporting: false, currentStep: "done", exportProgress: "" });
         set({ result: `__success__:${name}` });
         get().addLog(`--- Model '${name}' created`);
+        import("./notificationStore").then(({ useNotificationStore }) => {
+          useNotificationStore.getState().trigger("export_complete", "M-Courtyard", `Ollama export '${name}' completed.`);
+        });
       });
       unsubs.push(u2);
 
@@ -145,6 +148,9 @@ export const useExportStore = create<ExportState>((set, get) => ({
         set({ isExporting: false, currentStep: "", exportProgress: "" });
         set({ result: `Error: ${msg}` });
         get().addLog(`!!! Error: ${msg}`);
+        import("./notificationStore").then(({ useNotificationStore }) => {
+          useNotificationStore.getState().trigger("export_failed", "M-Courtyard", `Ollama export failed: ${msg}`);
+        });
       });
       unsubs.push(u3);
 

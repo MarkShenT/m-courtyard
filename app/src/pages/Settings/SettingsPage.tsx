@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Monitor, Info, Download, RefreshCw, FolderOpen, Palette, Languages, Globe, Type, HardDrive, Trash2, RotateCcw, ArrowLeft } from "lucide-react";
+import { Monitor, Info, Download, RefreshCw, FolderOpen, Palette, Languages, Globe, Type, HardDrive, Trash2, RotateCcw, ArrowLeft, Bell } from "lucide-react";
+import { NotificationSettings } from "@/components/NotificationPanel";
 import { checkEnvironment, setupEnvironment, installUv, type EnvironmentStatus } from "@/services/environment";
 import { useThemeStore, type ThemeId } from "@/stores/themeStore";
 import { useTaskStore } from "@/stores/taskStore";
@@ -52,6 +53,7 @@ export function SettingsPage() {
   const cleanupBlockedByTask = taskLocked || isOllamaExporting || isGgufExporting;
   const downloadSourceRef = useRef<HTMLElement | null>(null);
   const cacheRef = useRef<HTMLElement | null>(null);
+  const notificationsRef = useRef<HTMLElement | null>(null);
   const [env, setEnv] = useState<EnvironmentStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [setupLoading, setSetupLoading] = useState(false);
@@ -251,6 +253,7 @@ export function SettingsPage() {
     let el: HTMLElement | null = null;
     if (focus === "download-source") el = downloadSourceRef.current;
     else if (focus === "cache") el = cacheRef.current;
+    else if (focus === "notifications") el = notificationsRef.current;
     
     if (!el) return;
     requestAnimationFrame(() => {
@@ -890,6 +893,17 @@ export function SettingsPage() {
             )}
           </>
         ) : null}
+      </section>
+
+      {/* Notification Section */}
+      <section ref={notificationsRef as React.RefObject<HTMLDivElement>} id="notifications" className="space-y-4 scroll-mt-24">
+        <div className="flex items-center gap-2">
+          <Bell size={18} className="text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+            {t("notification:title")}
+          </h2>
+        </div>
+        <NotificationSettings />
       </section>
 
       {/* About Section */}

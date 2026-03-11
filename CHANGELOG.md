@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.11] - 2026-03-11
+
+### Added
+- **Notification Center (Core Feature)**: Added a dedicated in-app notification center and channel configuration flow for long-running events across dataset generation, training, and export.
+  - New notification panel accessible from the app shell, with channel management and event-level switches
+  - Added persistent notification history storage in SQLite so users can review recent events even after banners disappear
+  - Dashboard and workflow pages now surface unread notification state more clearly
+  - Added bilingual i18n (en / zh-CN) for the new notification UI and event content
+- **Multi-Channel Outbound Notifications**: Added support for 9 notification channels for external delivery:
+  - Generic Webhook
+  - Slack
+  - Discord
+  - Telegram Bot
+  - Feishu
+  - WeCom
+  - ntfy
+  - Bark
+  - Pushover
+
+### Fixed
+- **macOS Native Notifications Reliability**: Fixed the regression where packaged macOS builds could end up with no visible notification at all.
+  - Root cause: Finder-launched `.app` bundles may not inherit a PATH containing `/usr/bin`, so spawning `osascript` / `afplay` by bare command name could fail silently
+  - Fix: switched to absolute binary paths (`/usr/bin/osascript`, `/usr/bin/afplay`) for production-safe notification and sound delivery
+  - Notification sound playback is now decoupled from banner delivery so a notification failure no longer suppresses the completion sound
+- **macOS Notification Permission Reporting**: Removed the hardcoded `"granted"` backend response and replaced it with real permission-state inspection for the notification path currently used on macOS
+- **macOS Notification Sound Default**: Replaced the previous `Ping` sound with the built-in `Glass` sound for a cleaner completion cue
+- **Notification Entry Cleanup**: Removed the temporary "test system notification" entry and related UI copy so the final user-facing flow stays focused on real task notifications and history
+
+### Changed
+- macOS notification delivery now consistently uses the verified `osascript` path for both development and packaged builds, prioritizing reliability over experimental app-icon routing
+- Notification configuration is now treated as a first-class app feature rather than a development-only diagnostic path
+
 ## [0.4.10] - 2026-03-07
 
 ### Fixed
@@ -300,6 +332,8 @@ Delivers the **Batch Processing** cluster (PRD D-1 · D-2 · H-3): multi-file dr
 - **GitHub Actions CI**: Automated .dmg build and release on tag push
 - **Discord Integration**: Automated release notifications via webhook
 
+[0.4.11]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.11
+[0.4.10]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.10
 [0.4.9]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.9
 [0.4.8]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.8
 [0.4.7]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.7

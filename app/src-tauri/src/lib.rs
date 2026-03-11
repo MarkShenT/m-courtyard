@@ -11,8 +11,9 @@ use commands::files::{import_files, list_project_files, read_file_content, delet
 use commands::dataset::{start_cleaning, generate_dataset, get_dataset_preview, stop_generation, list_dataset_versions, open_dataset_folder, sample_raw_files, preview_clean_segments, import_custom_dataset};
 use commands::inference::start_inference;
 use commands::export::{export_to_ollama, export_to_gguf, export_to_mlx, verify_export_model, start_mlx_server, stop_mlx_server, get_mlx_server_status, MlxServerState};
+use commands::native_notification::{get_native_notification_permission, request_native_notification_permission, send_native_notification};
 use commands::storage::{scan_storage_usage, cleanup_project_cache};
-use commands::notification::send_notification;
+use commands::notification_config::{get_notification_config, save_notification_config};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:courtyard.db", migrations)
@@ -76,9 +78,13 @@ pub fn run() {
             set_export_path,
             set_hf_source,
             set_ollama_bin_path,
-            send_notification,
+            get_native_notification_permission,
+            request_native_notification_permission,
+            send_native_notification,
             scan_storage_usage,
             cleanup_project_cache,
+            get_notification_config,
+            save_notification_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

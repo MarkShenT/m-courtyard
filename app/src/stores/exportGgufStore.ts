@@ -104,6 +104,9 @@ export const useExportGgufStore = create<ExportGgufState>((set, get) => ({
         set({ isExporting: false, currentStep: "done", progress: "" });
         set({ result: `__success__:${filename}|${dir}` });
         get().addLog(`--- GGUF exported: ${filename}`);
+        import("./notificationStore").then(({ useNotificationStore }) => {
+          useNotificationStore.getState().trigger("export_complete", "M-Courtyard", `GGUF export '${filename}' completed.`);
+        });
       });
       unsubs.push(u2);
 
@@ -113,6 +116,9 @@ export const useExportGgufStore = create<ExportGgufState>((set, get) => ({
         set({ isExporting: false, currentStep: "", progress: "" });
         set({ result: `Error: ${msg}` });
         get().addLog(`!!! Error: ${msg}`);
+        import("./notificationStore").then(({ useNotificationStore }) => {
+          useNotificationStore.getState().trigger("export_failed", "M-Courtyard", `GGUF export failed: ${msg}`);
+        });
       });
       unsubs.push(u3);
 
