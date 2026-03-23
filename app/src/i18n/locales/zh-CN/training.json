@@ -261,5 +261,117 @@
     "clear": "清除已完成",
     "nextUp": "下一个：{{name}}",
     "added": "已加入训练队列"
+  },
+  "tab": {
+    "train": "训练",
+    "history": "历史记录"
+  },
+  "history": {
+    "title": "训练历史",
+    "empty": "暂无训练记录",
+    "emptyHint": "完成训练后会自动记录在此。开始一次训练即可创建第一条记录。",
+    "loading": "加载历史记录中...",
+    "recordCount": "共 {{count}} 条记录",
+    "sort": {
+      "label": "排序",
+      "date": "日期",
+      "loss": "最终损失",
+      "duration": "时长",
+      "model": "模型"
+    },
+    "filter": {
+      "label": "筛选",
+      "all": "全部方法",
+      "lora": "LoRA",
+      "dora": "DoRA",
+      "full": "Full"
+    },
+    "card": {
+      "completed": "已完成",
+      "failed": "失败",
+      "stopped": "已停止",
+      "unknown": "未知",
+      "running": "进行中",
+      "iters": "{{completed}} / {{total}} 次迭代",
+      "noLoss": "无损失数据",
+      "duration": "训练时长",
+      "trainLoss": "训练损失",
+      "valLoss": "验证损失",
+      "improvement": "改善幅度",
+      "noData": "无数据",
+      "expand": "详情",
+      "collapse": "收起"
+    },
+    "detail": {
+      "params": "训练参数",
+      "lossChart": "Loss 曲线",
+      "meta": "运行信息",
+      "model": "基础模型",
+      "method": "训练方法",
+      "optimizer": "优化器",
+      "iters": "迭代次数",
+      "batchSize": "批次大小",
+      "learningRate": "学习率",
+      "loraLayers": "LoRA 层数",
+      "loraRank": "LoRA 秩",
+      "loraScale": "LoRA 缩放",
+      "loraScaleStrategy": "缩放策略",
+      "loraDropout": "LoRA Dropout",
+      "maxSeqLength": "最大文本长度",
+      "gradCheckpoint": "梯度检查点",
+      "gradAccumulation": "梯度累积",
+      "maskPrompt": "屏蔽提示词",
+      "saveEvery": "保存间隔",
+      "stepsPerEval": "验证间隔",
+      "stepsPerReport": "报告间隔",
+      "valBatches": "验证批次",
+      "seed": "随机种子",
+      "dataset": "数据集",
+      "trainSamples": "训练样本数",
+      "validSamples": "验证样本数",
+      "adapterPath": "适配器路径",
+      "createdAt": "创建时间",
+      "on": "开启",
+      "off": "关闭"
+    },
+    "actions": {
+      "applyParams": "应用参数",
+      "applyParamsHint": "将此记录的参数加载到训练表单",
+      "openFolder": "打开文件夹",
+      "delete": "删除",
+      "deleteConfirm": "确定要删除此训练记录及其适配器文件吗？此操作不可恢复。",
+      "copied": "参数已应用！",
+      "batchSelect": "选择",
+      "batchSelected": "已选 {{count}} 条",
+      "batchDelete": "删除所选",
+      "batchDeleteConfirm": "删除 {{count}} 条记录及其适配器文件？此操作不可恢复。",
+      "batchDeleteConfirmBtn": "全部删除",
+      "batchCancel": "取消",
+      "selectAll": "全选",
+      "deselectAll": "取消选择"
+    },
+    "note": {
+      "placeholder": "为这次训练添加备注...",
+      "save": "保存"
+    },
+    "compare": {
+      "title": "记录对比",
+      "needTwo": "再选择一条记录，即可查看参数差异高亮与 Loss 曲线叠加对比。",
+      "ready": "已选择两条记录。你可以直接查看叠加曲线与参数差异。",
+      "clear": "清空对比",
+      "pick": "加入对比",
+      "lossOverlay": "Loss 曲线叠加",
+      "paramsDiff": "参数差异",
+      "field": "字段",
+      "recordA": "记录 A",
+      "recordB": "记录 B",
+      "status": "差异",
+      "different": "不同",
+      "same": "相同"
+    },
+    "sparkline": {
+      "train": "训练",
+      "val": "验证"
+    }
   }
 }

@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
-import { Play, Square, Gauge, Layers, Target, Gem, BarChart3, FileText, FolderOpen, Copy, Check, ArrowRight, Trash2, ChevronDown, ChevronRight, ChevronLeft, X, CheckCircle2, Circle, Trophy, Upload, Clock, TrendingDown, AlertTriangle, ListPlus, Info } from "lucide-react";
+import { Play, Square, Gauge, Layers, Target, Gem, BarChart3, FileText, FolderOpen, Copy, Check, ArrowRight, Trash2, ChevronDown, ChevronRight, ChevronLeft, X, CheckCircle2, Circle, Trophy, Upload, Clock, TrendingDown, AlertTriangle, ListPlus, Info, History } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { useProjectStore } from "@/stores/projectStore";
@@ -12,6 +12,8 @@ import { useTaskStore } from "@/stores/taskStore";
 import { type TrainingParams } from "@/services/training";
 import { ModelSelector } from "@/components/ModelSelector";
 import { StepProgress } from "@/components/StepProgress";
+import { TrainingHistory } from "./TrainingHistory";
+import { useTrainingHistoryStore, type TrainingHistoryRecord } from "@/stores/trainingHistoryStore";
 
 type HealthLevel = "green" | "yellow" | "red";
 type AlertLevel = "warning" | "critical";
@@ -356,6 +358,44 @@ export function TrainingPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [methodAdvancedOpen, setMethodAdvancedOpen] = useState(false);
   const maxSeqLengthInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ─── Training History Tab ───
+  const [activeTab, setActiveTab] = useState<"train" | "history">("train");
+  const { loadHistory } = useTrainingHistoryStore();
+
+  // Reload history when training completes (save is done in trainingStore's event listener)
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    if ((prev === "running") && (status === "completed" || status === "failed") && currentProject?.id) {
+      loadHistory(currentProject.id);
+    }
+  }, [status]); // intentionally minimal deps — only trigger on status change
+
+  // Apply parameters from a history record
+  const handleApplyHistoryParams = useCallback((record: TrainingHistoryRecord) => {
+    updateParam("model", record.base_model);
+    updateParam("fine_tune_type", record.fine_tune_type as any);
+    updateParam("optimizer", record.optimizer as any);
+    updateParam("iters", record.iters);
+    updateParam("batch_size", record.batch_size);
+    updateParam("lora_layers", record.lora_layers);
+    updateParam("lora_rank", record.lora_rank);
+    updateParam("lora_scale", record.lora_scale);
+    updateParam("lora_scale_strategy", record.lora_scale_strategy as any);
+    updateParam("lora_dropout", record.lora_dropout);
+    updateParam("learning_rate", record.learning_rate as any);
+    updateParam("max_seq_length", record.max_seq_length);
+    updateParam("grad_checkpoint", record.grad_checkpoint);
+    updateParam("grad_accumulation_steps", record.grad_accumulation_steps);
+    updateParam("save_every", record.save_every);
+    updateParam("mask_prompt", record.mask_prompt);
+    updateParam("steps_per_eval", record.steps_per_eval);
+    updateParam("steps_per_report", record.steps_per_report);
+    updateParam("val_batches", record.val_batches);
+    updateParam("seed", record.seed);
+    setParamsEdited(true);
+    setActiveTab("train");
+  }, [updateParam]);
 
   // Model-level validation (dataset selection is validated separately before start)
   const canStartTraining = !!(params.model && (modelValid !== false));
@@ -815,12 +855,12 @@ export function TrainingPage() {
     if (!check.allowed) return;
     if (!acquireTask(currentProject.id, currentProject.name, "training")) return;
     try {
-      const jobId = await invoke<string>("start_training", {
+      const result = await invoke<{ job_id: string; adapter_path: string }>("start_training", {
         projectId: currentProject.id,
         params: JSON.stringify(effectiveParams),
         datasetPath: selectedDataset?.path || "",
       });
-      startTraining(jobId);
+      startTraining(result.job_id, result.adapter_path);
     } catch (e) {
       useTrainingStore.getState().setStatus("failed");
       useTrainingStore.getState().addLog(`Error: ${e}`);
@@ -834,6 +874,7 @@ export function TrainingPage() {
       await invoke("stop_training", { jobId: currentJobId });
       storeStopTraining();
       useTaskStore.getState().releaseTask();
+      // training-complete event (fired by Rust after process exits) will reload history with the saved result
     } catch (e) {
       useTrainingStore.getState().addLog(`Stop error: ${e}`);
     }
@@ -875,6 +916,39 @@ export function TrainingPage() {
         </div>
       </div>
 
+      {/* ===== Tab Bar ===== */}
+      <div className="flex items-center gap-1 border-b border-border">
+        <button
+          onClick={() => setActiveTab("train")}
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "train"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Layers size={14} />
+          {t("tab.train")}
+        </button>
+        <button
+          onClick={() => { setActiveTab("history"); if (currentProject?.id) loadHistory(currentProject.id); }}
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "history"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <History size={14} />
+          {t("tab.history")}
+        </button>
+      </div>
+
+      {/* ===== History Tab ===== */}
+      {activeTab === "history" && (
+        <TrainingHistory onApplyParams={handleApplyHistoryParams} />
+      )}
+
+      {/* ===== Training Tab ===== */}
+      {activeTab === "train" && <>
       {/* Unified Step Progress */}
       <StepProgress subSteps={trainingSubSteps} />
 
@@ -1989,6 +2063,7 @@ export function TrainingPage() {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

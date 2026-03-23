@@ -19,13 +19,19 @@ fn is_quantized_model(model: &str) -> bool {
     patterns.iter().any(|p| lower.contains(p))
 }
 
+#[derive(serde::Serialize)]
+pub struct StartTrainingResult {
+    pub job_id: String,
+    pub adapter_path: String,
+}
+
 #[tauri::command]
 pub async fn start_training(
     app: tauri::AppHandle,
     project_id: String,
     params: String,
     dataset_path: Option<String>,
-) -> Result<String, String> {
+) -> Result<StartTrainingResult, String> {
     let job_id = Uuid::new_v4().to_string();
     let executor = PythonExecutor::default();
 
@@ -143,6 +149,10 @@ pub async fn start_training(
         "steps_per_eval": steps_per_eval,
         "steps_per_report": steps_per_report,
         "val_batches": val_batches,
+        "seed": seed,
+        "dataset_path": data_dir.to_string_lossy(),
+        "train_samples": train_count,
+        "valid_samples": valid_count,
         "created_at": chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
     });
     let _ = std::fs::write(
@@ -174,6 +184,8 @@ pub async fn start_training(
 
     let python_bin = executor.python_bin().clone();
     let job_id_clone = job_id.clone();
+    let adapter_path_str = adapter_path.to_string_lossy().to_string();
+    let adapter_path_str_spawn = adapter_path_str.clone();
 
     // Read configured HF download source for HF_ENDPOINT env var
     let app_config = load_config();
@@ -260,45 +272,115 @@ pub async fn start_training(
 
                 use tokio::io::{AsyncBufReadExt, BufReader};
 
-                // Read both stdout and stderr concurrently
+                let started_at_ms: f64 = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as f64)
+                    .unwrap_or(0.0);
+
+                // Collect all log lines for post-training loss parsing
                 let stdout = child.stdout.take();
                 let stderr = child.stderr.take();
+                let collected: std::sync::Arc<std::sync::Mutex<Vec<String>>> =
+                    std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
                 let app_out = app.clone();
                 let jid_out = job_id_clone.clone();
+                let col_out = std::sync::Arc::clone(&collected);
                 let stdout_task = tokio::spawn(async move {
                     if let Some(out) = stdout {
                         let mut lines = BufReader::new(out).lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             let _ = app_out.emit("training-log", serde_json::json!({
                                 "job_id": jid_out,
-                                "line": line,
+                                "line": &line,
                             }));
+                            if let Ok(mut v) = col_out.lock() { v.push(line); }
                         }
                     }
                 });
 
                 let app_err = app.clone();
                 let jid_err = job_id_clone.clone();
+                let col_err = std::sync::Arc::clone(&collected);
                 let stderr_task = tokio::spawn(async move {
                     if let Some(err) = stderr {
                         let mut lines = BufReader::new(err).lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             let _ = app_err.emit("training-log", serde_json::json!({
                                 "job_id": jid_err,
-                                "line": line,
+                                "line": &line,
                             }));
+                            if let Ok(mut v) = col_err.lock() { v.push(line); }
                         }
                     }
                 });
 
                 let _ = tokio::join!(stdout_task, stderr_task);
 
+                let completed_at_ms: f64 = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as f64)
+                    .unwrap_or(0.0);
+
+                // Parse training/validation loss from collected log lines
+                let mut train_series: Vec<serde_json::Value> = Vec::new();
+                let mut val_series: Vec<serde_json::Value> = Vec::new();
+                let mut last_iter: u64 = 0;
+                if let Ok(lines) = collected.lock() {
+                    for line in lines.iter() {
+                        if !line.starts_with("Iter ") { continue; }
+                        let after_iter = &line[5..];
+                        let iter_end = after_iter.find(|c: char| !c.is_ascii_digit()).unwrap_or(after_iter.len());
+                        let iter: u64 = match after_iter[..iter_end].parse() { Ok(n) => n, Err(_) => continue };
+                        last_iter = last_iter.max(iter);
+                        if let Some(rest) = line.split("Train loss ").nth(1) {
+                            let s = rest.split(',').next().unwrap_or("").trim();
+                            if let Ok(loss) = s.parse::<f64>() {
+                                train_series.push(serde_json::json!([iter as f64, loss]));
+                            }
+                        }
+                        if let Some(rest) = line.split("Val loss ").nth(1) {
+                            let s = rest.split(',').next()
+                                .and_then(|p| p.split_whitespace().next())
+                                .unwrap_or("");
+                            if let Ok(loss) = s.parse::<f64>() {
+                                val_series.push(serde_json::json!([iter as f64, loss]));
+                            }
+                        }
+                    }
+                }
+                let final_train = train_series.last().and_then(|v| v.as_array()).and_then(|a| a.get(1)).and_then(|v| v.as_f64());
+                let first_train = train_series.first().and_then(|v| v.as_array()).and_then(|a| a.get(1)).and_then(|v| v.as_f64());
+                let final_val   = val_series.last().and_then(|v| v.as_array()).and_then(|a| a.get(1)).and_then(|v| v.as_f64());
+                let loss_improvement = match (first_train, final_train) {
+                    (Some(f), Some(l)) if f > 0.0 => Some((f - l) / f * 100.0),
+                    _ => None,
+                };
+
                 match child.wait().await {
-                    Ok(status) => {
+                    Ok(exit_status) => {
+                        let success = exit_status.success();
+                        let final_status = if success { "completed" } else { "stopped" };
+                        let result_json = serde_json::json!({
+                            "status": final_status,
+                            "started_at": started_at_ms,
+                            "completed_at": completed_at_ms,
+                            "duration_ms": completed_at_ms - started_at_ms,
+                            "final_train_loss": final_train,
+                            "final_val_loss": final_val,
+                            "first_train_loss": first_train,
+                            "loss_improvement_pct": loss_improvement,
+                            "total_iters_completed": last_iter,
+                            "train_loss_series": train_series,
+                            "val_loss_series": val_series,
+                        });
+                        let _ = std::fs::write(
+                            std::path::Path::new(&adapter_path_str_spawn).join("training_result.json"),
+                            serde_json::to_string(&result_json).unwrap_or_default(),
+                        );
                         let _ = app.emit("training-complete", serde_json::json!({
                             "job_id": job_id_clone,
-                            "success": status.success(),
+                            "success": success,
                         }));
                     }
                     Err(e) => {
@@ -322,7 +404,10 @@ pub async fn start_training(
         }
     });
 
-    Ok(job_id)
+    Ok(StartTrainingResult {
+        job_id,
+        adapter_path: adapter_path_str,
+    })
 }
 
 #[tauri::command]
@@ -809,4 +894,188 @@ pub struct LmStudioServerStatus {
     pub running: bool,
     pub models: Vec<String>,
     pub error: Option<String>,
+}
+
+// ─── Training History ───────────────────────────────────────────────
+
+/// Save training result data (loss curves, metrics, status) alongside the adapter.
+/// Called by the frontend when training completes, fails, or is stopped.
+#[tauri::command]
+pub fn save_training_result(adapter_path: String, result_json: String) -> Result<(), String> {
+    let path = std::path::Path::new(&adapter_path);
+    if !path.exists() {
+        return Err(format!("Adapter path does not exist: {}", adapter_path));
+    }
+    let result_path = path.join("training_result.json");
+    std::fs::write(&result_path, &result_json)
+        .map_err(|e| format!("Failed to save training result: {}", e))?;
+    Ok(())
+}
+
+/// A single training history record combining metadata + results.
+#[derive(serde::Serialize)]
+pub struct TrainingHistoryRecord {
+    pub id: String,
+    pub adapter_path: String,
+    pub has_weights: bool,
+    // From training_meta.json
+    pub base_model: String,
+    pub fine_tune_type: String,
+    pub optimizer: String,
+    pub iters: u64,
+    pub batch_size: u64,
+    pub lora_layers: u64,
+    pub lora_rank: u64,
+    pub lora_scale: f64,
+    pub lora_scale_strategy: String,
+    pub lora_dropout: f64,
+    pub learning_rate: f64,
+    pub max_seq_length: u64,
+    pub grad_checkpoint: bool,
+    pub grad_accumulation_steps: u64,
+    pub save_every: u64,
+    pub mask_prompt: bool,
+    pub steps_per_eval: u64,
+    pub steps_per_report: u64,
+    pub val_batches: u64,
+    pub seed: u64,
+    pub dataset_path: String,
+    pub train_samples: u64,
+    pub valid_samples: u64,
+    pub created_at: String,
+    // From training_result.json (optional — may not exist if training was interrupted)
+    pub status: String,
+    pub started_at: Option<f64>,
+    pub completed_at: Option<f64>,
+    pub duration_ms: Option<f64>,
+    pub final_train_loss: Option<f64>,
+    pub final_val_loss: Option<f64>,
+    pub first_train_loss: Option<f64>,
+    pub loss_improvement_pct: Option<f64>,
+    pub total_iters_completed: Option<u64>,
+    pub train_loss_series: Vec<[f64; 2]>,
+    pub val_loss_series: Vec<[f64; 2]>,
+    pub note: String,
+}
+
+/// List all training history records for a project by scanning adapter directories.
+#[tauri::command]
+pub fn list_training_history(project_id: String) -> Result<Vec<TrainingHistoryRecord>, String> {
+    let dir_manager = ProjectDirManager::new();
+    let adapters_dir = dir_manager.project_path(&project_id).join("adapters");
+    if !adapters_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut records: Vec<TrainingHistoryRecord> = Vec::new();
+
+    let entries = std::fs::read_dir(&adapters_dir).map_err(|e| e.to_string())?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let meta_result = entry.metadata();
+        if meta_result.is_err() { continue; }
+        let meta = meta_result.unwrap();
+        if !meta.is_dir() { continue; }
+
+        let path = entry.path();
+        let meta_path = path.join("training_meta.json");
+        // Only include directories that have training_meta.json (i.e., created by our training flow)
+        if !meta_path.exists() { continue; }
+
+        let meta_json: serde_json::Value = match std::fs::read_to_string(&meta_path) {
+            Ok(s) => serde_json::from_str(&s).unwrap_or_default(),
+            Err(_) => continue,
+        };
+
+        let has_weights = path.join("adapters.safetensors").exists()
+            || std::fs::read_dir(&path).ok()
+                .map(|rd| rd.filter_map(|e| e.ok())
+                    .any(|e| e.file_name().to_string_lossy().ends_with("_adapters.safetensors")))
+                .unwrap_or(false);
+
+        // Read optional result file
+        let result_path = path.join("training_result.json");
+        let result_json: serde_json::Value = std::fs::read_to_string(&result_path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+
+        let adapter_id = entry.file_name().to_string_lossy().to_string();
+
+        let record = TrainingHistoryRecord {
+            id: adapter_id,
+            adapter_path: path.to_string_lossy().to_string(),
+            has_weights,
+            // Meta fields
+            base_model: meta_json["base_model"].as_str().unwrap_or("").to_string(),
+            fine_tune_type: meta_json["fine_tune_type"].as_str().unwrap_or("lora").to_string(),
+            optimizer: meta_json["optimizer"].as_str().unwrap_or("adam").to_string(),
+            iters: meta_json["iters"].as_u64().unwrap_or(0),
+            batch_size: meta_json["batch_size"].as_u64().unwrap_or(0),
+            lora_layers: meta_json["lora_layers"].as_u64().unwrap_or(0),
+            lora_rank: meta_json["lora_rank"].as_u64().unwrap_or(0),
+            lora_scale: meta_json["lora_scale"].as_f64().unwrap_or(0.0),
+            lora_scale_strategy: meta_json["lora_scale_strategy"].as_str().unwrap_or("standard").to_string(),
+            lora_dropout: meta_json["lora_dropout"].as_f64().unwrap_or(0.0),
+            learning_rate: meta_json["learning_rate"].as_f64().unwrap_or(0.0),
+            max_seq_length: meta_json["max_seq_length"].as_u64().unwrap_or(0),
+            grad_checkpoint: meta_json["grad_checkpoint"].as_bool().unwrap_or(false),
+            grad_accumulation_steps: meta_json["grad_accumulation_steps"].as_u64().unwrap_or(1),
+            save_every: meta_json["save_every"].as_u64().unwrap_or(100),
+            mask_prompt: meta_json["mask_prompt"].as_bool().unwrap_or(false),
+            steps_per_eval: meta_json["steps_per_eval"].as_u64().unwrap_or(200),
+            steps_per_report: meta_json["steps_per_report"].as_u64().unwrap_or(10),
+            val_batches: meta_json["val_batches"].as_u64().unwrap_or(25),
+            seed: meta_json["seed"].as_u64().unwrap_or(0),
+            dataset_path: meta_json["dataset_path"].as_str().unwrap_or("").to_string(),
+            train_samples: meta_json["train_samples"].as_u64().unwrap_or(0),
+            valid_samples: meta_json["valid_samples"].as_u64().unwrap_or(0),
+            created_at: meta_json["created_at"].as_str().unwrap_or("").to_string(),
+            // Result fields
+            status: result_json["status"].as_str().unwrap_or(
+                if has_weights { "completed" } else { "stopped" }
+            ).to_string(),
+            started_at: result_json["started_at"].as_f64(),
+            completed_at: result_json["completed_at"].as_f64(),
+            duration_ms: result_json["duration_ms"].as_f64(),
+            final_train_loss: result_json["final_train_loss"].as_f64(),
+            final_val_loss: result_json["final_val_loss"].as_f64(),
+            first_train_loss: result_json["first_train_loss"].as_f64(),
+            loss_improvement_pct: result_json["loss_improvement_pct"].as_f64(),
+            total_iters_completed: result_json["total_iters_completed"].as_u64(),
+            train_loss_series: result_json["train_loss_series"].as_array()
+                .map(|arr| arr.iter().filter_map(|v| {
+                    let a = v.as_array()?;
+                    Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
+                }).collect())
+                .unwrap_or_default(),
+            val_loss_series: result_json["val_loss_series"].as_array()
+                .map(|arr| arr.iter().filter_map(|v| {
+                    let a = v.as_array()?;
+                    Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
+                }).collect())
+                .unwrap_or_default(),
+            note: result_json["note"].as_str().unwrap_or("").to_string(),
+        };
+
+        records.push(record);
+    }
+
+    // Sort by created_at descending (newest first)
+    records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Ok(records)
+}
+
+/// Update the note field in a training result file.
+#[tauri::command]
+pub fn update_training_note(adapter_path: String, note: String) -> Result<(), String> {
+    let path = std::path::Path::new(&adapter_path);
+    let result_path = path.join("training_result.json");
+    let mut result_json: serde_json::Value = std::fs::read_to_string(&result_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(serde_json::json!({}));
+    result_json["note"] = serde_json::Value::String(note);
+    std::fs::write(&result_path, serde_json::to_string_pretty(&result_json).unwrap_or_default())
+        .map_err(|e| format!("Failed to update note: {}", e))?;
+    Ok(())
 }

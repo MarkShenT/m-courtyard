@@ -62,13 +62,13 @@ export const useTrainingQueueStore = create<TrainingQueueState>((set, get) => ({
 
     // Start training
     const trainingStore = useTrainingStore.getState();
-    invoke<string>("start_training", {
+    invoke<{ job_id: string; adapter_path: string }>("start_training", {
       projectId: next.projectId,
       params: next.params,
       datasetPath: next.datasetPath,
     })
-      .then((jobId) => {
-        trainingStore.startTraining(jobId);
+      .then((result) => {
+        trainingStore.startTraining(result.job_id, result.adapter_path);
       })
       .catch((e) => {
         trainingStore.setStatus("failed");

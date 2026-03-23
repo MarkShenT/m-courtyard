@@ -6,7 +6,7 @@ mod python;
 use commands::config::{get_app_config, set_model_source_path, set_export_path, set_hf_source, set_ollama_bin_path, set_lmstudio_api_url, check_lmstudio_api};
 use commands::environment::{check_environment, setup_environment, install_uv, check_ollama_status, list_ollama_models, get_ollama_path_info, fix_ollama_models_path, reset_ollama_models_path};
 use commands::project::{create_project, delete_project, list_projects};
-use commands::training::{start_training, stop_training, open_project_folder, list_adapters, delete_adapter, open_adapter_folder, scan_local_models, open_model_cache, validate_model_path, open_lmstudio_app, check_lmstudio_server};
+use commands::training::{start_training, stop_training, open_project_folder, list_adapters, delete_adapter, open_adapter_folder, scan_local_models, open_model_cache, validate_model_path, open_lmstudio_app, check_lmstudio_server, save_training_result, list_training_history, update_training_note};
 use commands::files::{import_files, list_project_files, read_file_content, delete_file, clear_project_data};
 use commands::dataset::{start_cleaning, generate_dataset, get_dataset_preview, stop_generation, list_dataset_versions, open_dataset_folder, sample_raw_files, preview_clean_segments, import_custom_dataset};
 use commands::inference::start_inference;
@@ -89,6 +89,9 @@ pub fn run() {
             cleanup_project_cache,
             get_notification_config,
             save_notification_config,
+            save_training_result,
+            list_training_history,
+            update_training_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

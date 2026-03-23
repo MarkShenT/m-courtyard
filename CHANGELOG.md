@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-03-23
+
+### Added
+- **Training History Workspace**: Added a dedicated history experience for completed runs, including expandable details, parameter review, note editing, and side-by-side comparison.
+- **History Management Utilities**: Added batch selection and batch deletion for adapter-backed training records.
+
+### Fixed
+- **Training Result Persistence**: Training metadata and loss-series data are now written reliably from the Rust backend at the end of training, fixing missing `training_result.json` files and `N/A` metrics in history.
+- **Loss Curve Rendering in History**: Fixed blank or inconsistent loss charts in training history and comparison mode, including the case where one record has only a single loss point or another compared record has no curve data.
+- **Training Status Accuracy**: Active runs no longer appear in history as stopped/unknown before results are finalized, and completed/stopped runs now refresh into history more reliably.
+
+### Changed
+- Updated the app version, release metadata, and public documentation to `0.5.1`.
+
 ## [0.5.0] - 2026-03-17
 
 ### Added
@@ -351,6 +365,7 @@ Delivers the **Batch Processing** cluster (PRD D-1 · D-2 · H-3): multi-file dr
 - **GitHub Actions CI**: Automated .dmg build and release on tag push
 - **Discord Integration**: Automated release notifications via webhook
 
+[0.5.1]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.5.1
 [0.5.0]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.5.0
 [0.4.11]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.11
 [0.4.10]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.10

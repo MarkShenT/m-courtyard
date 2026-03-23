@@ -21,7 +21,7 @@ interface TrainingState {
   modelValid: boolean | null; // null = not checked, true/false = validation result
 
   // Actions
-  startTraining: (jobId: string) => void;
+  startTraining: (jobId: string, adapterPath: string) => void;
   stopTraining: () => void;
   resetAll: () => void;
   resetParams: () => void;
@@ -53,7 +53,7 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
   _listenersReady: false,
   _unlistens: [],
 
-  startTraining: (jobId: string) =>
+  startTraining: (jobId: string, adapterPath: string) =>
     set({
       status: "running",
       logs: [],
@@ -61,7 +61,7 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
       trainLossData: [],
       valLossData: [],
       currentIter: 0,
-      adapterPath: null,
+      adapterPath,
       startedAt: Date.now(),
       completedAt: null,
     }),
@@ -165,13 +165,27 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     const u2 = await listen<{ job_id: string; success: boolean }>(
       "training-complete",
       (event) => {
+        // Rust has already written training_result.json before emitting this event.
+        // Reload history unconditionally (runs even if training was stopped via handleStop).
+        import("./projectStore").then(({ useProjectStore }) => {
+          const projectId = useProjectStore.getState().currentProject?.id;
+          if (projectId) {
+            import("./trainingHistoryStore").then(({ useTrainingHistoryStore }) => {
+              useTrainingHistoryStore.getState().loadHistory(projectId);
+            });
+          }
+        });
+
         const { status, currentJobId } = get();
         if (status !== "running" || !currentJobId || event.payload.job_id !== currentJobId) return;
+        const completedAt = Date.now();
+        const finalStatus = event.payload.success ? "completed" : "failed";
         set({
-          status: event.payload.success ? "completed" : "failed",
+          status: finalStatus,
           currentJobId: null,
-          completedAt: Date.now(),
+          completedAt,
         });
+
         useTaskStore.getState().releaseTask();
         import("./notificationStore").then(({ useNotificationStore }) => {
           const ns = useNotificationStore.getState();

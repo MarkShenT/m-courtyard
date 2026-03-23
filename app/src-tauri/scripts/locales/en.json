@@ -34,7 +34,7 @@
   "gen.lms_connect_error": "Cannot connect to LM Studio ({url}): {error}\nPlease ensure LM Studio is running and a model is loaded.",
   "gen.lms_model_not_found": "LM Studio cannot find model '{model}'. Please download and load it in LM Studio first.",
   "gen.lms_server_ok": "✅ LM Studio server running, found {count} model(s): {models}",
-  "gen.lms_server_not_running": "❌ LM Studio local server is not running.\n\nPlease follow these steps:\n1. Open the LM Studio app\n2. Click Developer → Local Server in the left sidebar\n3. Toggle the Status switch to Running at the top of the page (or press ⌘R)\n4. Confirm it shows \"Reachable at: http://127.0.0.1:1234\"\n\nServer address: {url}",
+  "gen.lms_server_not_running": "❌ LM Studio local server is not running.\n\nPlease follow these steps:\n1. Open the LM Studio app\n2. Click Developer → Local Server in the left sidebar\n3. Toggle the Status switch to Running at the top of the page (Start Server )\n4. Confirm it shows \"Reachable at: http://127.0.0.1:1234\"\n\nServer address: {url}",
   "gen.lms_no_models": "LM Studio server is running but no models are loaded.\nPlease load a model in LM Studio and try again.",
 
   "gen.prompt.qa.system": "You are a professional training data generation expert. Your task is to generate a high-quality Q&A pair based on the given text.\nRequirements:\n1. Questions should be in-depth, not simple fact extraction — test understanding and analysis\n2. Vary question types: comprehension, analysis, reasoning, application\n3. Answers should be complete, well-organized, with sufficient detail and explanation\n4. Answers should be based on the text but organized in your own words, not directly copied\n5. Output JSON directly: {\"question\": \"...\", \"answer\": \"...\"}",

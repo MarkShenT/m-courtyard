@@ -54,8 +54,8 @@ M-Courtyard is a **desktop assistant** designed to demystify LLM fine-tuning. Fo
 
 - **`mlx-lm` is the core engine**: training and built-in inference are powered by Apple MLX rather than Ollama.
 - **`Ollama` is currently optional but recommended**: it is used for Ollama-based AI dataset generation and one-click Ollama export.
-- **`LM Studio` is already compatible through MLX export**: exported MLX models can be loaded there today.
-- **`LM Studio` first-class in-app integration is planned for `v0.5.0`**: model discovery, download, and local OpenAI-compatible server workflows will be added as a parallel local runtime path instead of presenting Ollama as the only option.
+- **`LM Studio` is supported as a parallel local runtime**: use its local OpenAI-compatible server for AI dataset generation, or load exported MLX models there on Apple Silicon.
+- **Built-in rules remain available with no extra runtime**: if you do not want to install Ollama or LM Studio, you can still generate datasets with the built-in rules path.
 
 ## Interface Tour
 
@@ -90,7 +90,8 @@ Instantly chat with your fine-tuned model and export it either to Ollama or as M
 - **RAM**: 16 GB+ recommended (for 7B/8B models); 8 GB works for small models (1.5B/3B)
 - **Core Runtime**: M-Courtyard guides the local `uv` / Python / `mlx-lm` setup inside the app
 - **Optional Local Runtime**: [Ollama](https://ollama.com) installed and running if you want Ollama-based AI dataset generation or Ollama export
-- **Optional Local Runtime**: [LM Studio](https://lmstudio.ai) if you want to load exported MLX models there today; first-class in-app LM Studio integration is planned for `v0.5.0`
+- **Optional Local Runtime**: [LM Studio](https://lmstudio.ai) if you want LM Studio-based AI dataset generation or to load exported MLX models there
+- **No extra runtime required**: the built-in rules path can generate datasets without Ollama or LM Studio
 
 ## Quick Start
 
