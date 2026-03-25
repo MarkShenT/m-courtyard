@@ -15,6 +15,21 @@ pub struct AppConfig {
     pub ollama_bin: Option<String>,
     /// LM Studio local API base URL (default: http://localhost:1234)
     pub lmstudio_api_url: Option<String>,
+    /// Enterprise network compatibility settings
+    #[serde(default)]
+    pub network: NetworkConfig,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct NetworkConfig {
+    /// HTTP proxy URL (e.g. http://proxy.corp.com:8080)
+    pub http_proxy: Option<String>,
+    /// HTTPS proxy URL (e.g. http://proxy.corp.com:8080)
+    pub https_proxy: Option<String>,
+    /// Path to a custom CA certificate bundle (PEM file)
+    pub ssl_cert_file: Option<String>,
+    /// Directory containing CA certificates
+    pub ssl_cert_dir: Option<String>,
 }
 
 fn default_hf_source() -> String {
@@ -264,4 +279,115 @@ pub fn hf_endpoint_for_source(source: &str) -> Option<String> {
         "hf-mirror" => Some("https://hf-mirror.com".to_string()),
         _ => None, // huggingface uses default, modelscope not supported via HF_ENDPOINT
     }
+}
+
+// ─── Network Config Commands ───
+
+#[tauri::command]
+pub fn get_network_config() -> Result<NetworkConfig, String> {
+    let config = load_config();
+    Ok(config.network)
+}
+
+#[tauri::command]
+pub fn save_network_config(
+    http_proxy: Option<String>,
+    https_proxy: Option<String>,
+    ssl_cert_file: Option<String>,
+    ssl_cert_dir: Option<String>,
+) -> Result<(), String> {
+    let mut config = load_config();
+    config.network.http_proxy = http_proxy.filter(|s| !s.is_empty());
+    config.network.https_proxy = https_proxy.filter(|s| !s.is_empty());
+    config.network.ssl_cert_file = ssl_cert_file.filter(|s| !s.is_empty());
+    config.network.ssl_cert_dir = ssl_cert_dir.filter(|s| !s.is_empty());
+    save_config(&config)
+}
+/// enterprise networks: proxy, SSL certs, and shell env inheritance.
+/// This ensures that uv commands work behind corporate proxies and
+/// with custom certificate authorities, even when launched from Finder.
+pub fn build_uv_env() -> Vec<(String, String)> {
+    let mut envs: Vec<(String, String)> = Vec::new();
+
+    // Always enable system certificate store
+    envs.push(("UV_SYSTEM_CERTS".to_string(), "true".to_string()));
+
+    let config = load_config();
+    let net = &config.network;
+
+    // User-configured proxy settings take highest priority
+    if let Some(ref v) = net.http_proxy {
+        envs.push(("HTTP_PROXY".to_string(), v.clone()));
+        envs.push(("http_proxy".to_string(), v.clone()));
+    }
+    if let Some(ref v) = net.https_proxy {
+        envs.push(("HTTPS_PROXY".to_string(), v.clone()));
+        envs.push(("https_proxy".to_string(), v.clone()));
+    }
+    if let Some(ref v) = net.ssl_cert_file {
+        envs.push(("SSL_CERT_FILE".to_string(), v.clone()));
+        envs.push(("CURL_CA_BUNDLE".to_string(), v.clone()));
+    }
+    if let Some(ref v) = net.ssl_cert_dir {
+        envs.push(("SSL_CERT_DIR".to_string(), v.clone()));
+    }
+
+    // Inherit proxy env vars from the user's login shell when not
+    // explicitly configured — Finder-launched .app bundles do NOT
+    // inherit shell profile env vars automatically.
+    if net.http_proxy.is_none()
+        || net.https_proxy.is_none()
+        || net.ssl_cert_file.is_none()
+        || net.ssl_cert_dir.is_none()
+    {
+        if let Some(shell_envs) = load_shell_proxy_env() {
+            if net.http_proxy.is_none() {
+                if let Some(v) = shell_envs.get("HTTP_PROXY") {
+                    envs.push(("HTTP_PROXY".to_string(), v.clone()));
+                    envs.push(("http_proxy".to_string(), v.clone()));
+                }
+            }
+            if net.https_proxy.is_none() {
+                if let Some(v) = shell_envs.get("HTTPS_PROXY") {
+                    envs.push(("HTTPS_PROXY".to_string(), v.clone()));
+                    envs.push(("https_proxy".to_string(), v.clone()));
+                }
+            }
+            if net.ssl_cert_file.is_none() {
+                if let Some(v) = shell_envs.get("SSL_CERT_FILE") {
+                    envs.push(("SSL_CERT_FILE".to_string(), v.clone()));
+                    envs.push(("CURL_CA_BUNDLE".to_string(), v.clone()));
+                }
+            }
+            if net.ssl_cert_dir.is_none() {
+                if let Some(v) = shell_envs.get("SSL_CERT_DIR") {
+                    envs.push(("SSL_CERT_DIR".to_string(), v.clone()));
+                }
+            }
+        }
+    }
+
+    envs
+}
+
+/// Load proxy-related env vars from the user's login shell.
+fn load_shell_proxy_env() -> Option<std::collections::HashMap<String, String>> {
+    let script = r#"source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; printf '%s\n%s\n%s\n%s' "$HTTP_PROXY" "$HTTPS_PROXY" "$SSL_CERT_FILE" "$SSL_CERT_DIR""#;
+    let output = std::process::Command::new("/bin/zsh")
+        .args(["-c", script])
+        .output()
+        .ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    let mut map = std::collections::HashMap::new();
+    let keys = ["HTTP_PROXY", "HTTPS_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR"];
+    for (i, key) in keys.iter().enumerate() {
+        if let Some(val) = lines.get(i) {
+            let val = val.trim();
+            if !val.is_empty() {
+                map.insert(key.to_string(), val.to_string());
+            }
+        }
+    }
+    if map.is_empty() { None } else { Some(map) }
 }

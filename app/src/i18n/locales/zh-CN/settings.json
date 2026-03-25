@@ -61,6 +61,24 @@
     "en": "English",
     "zhCN": "简体中文"
   },
+  "network": {
+    "title": "网络与代理",
+    "desc": "为企业网络环境配置代理和 SSL 证书。这些设置会应用于 Python 环境初始化和包下载。",
+    "httpProxy": "HTTP 代理",
+    "httpProxyPlaceholder": "例如 http://proxy.corp.com:8080",
+    "httpsProxy": "HTTPS 代理",
+    "httpsProxyPlaceholder": "例如 http://proxy.corp.com:8080",
+    "sslCertFile": "SSL 证书文件 (PEM)",
+    "sslCertFilePlaceholder": "CA 证书包路径，例如 /etc/ssl/certs/ca-certificates.crt",
+    "sslCertDir": "SSL 证书目录",
+    "sslCertDirPlaceholder": "包含 CA 证书的目录路径",
+    "saved": "网络设置已保存。",
+    "saveError": "保存失败：{{error}}",
+    "save": "保存",
+    "browseFile": "浏览",
+    "shellEnvHint": "提示：未在此处配置时，会自动继承 shell 配置文件（~/.zshrc）中的代理变量。",
+    "systemCertsHint": "系统证书存储始终启用（uv --system-certs）。"
+  },
   "about": {
     "title": "关于",
     "version": "版本",

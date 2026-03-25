@@ -61,6 +61,24 @@
     "en": "English",
     "zhCN": "简体中文"
   },
+  "network": {
+    "title": "Network & Proxy",
+    "desc": "Configure proxy and SSL certificate settings for enterprise networks. These settings apply to Python environment setup and package downloads.",
+    "httpProxy": "HTTP Proxy",
+    "httpProxyPlaceholder": "e.g. http://proxy.corp.com:8080",
+    "httpsProxy": "HTTPS Proxy",
+    "httpsProxyPlaceholder": "e.g. http://proxy.corp.com:8080",
+    "sslCertFile": "SSL Certificate File (PEM)",
+    "sslCertFilePlaceholder": "Path to CA certificate bundle, e.g. /etc/ssl/certs/ca-certificates.crt",
+    "sslCertDir": "SSL Certificate Directory",
+    "sslCertDirPlaceholder": "Path to directory containing CA certificates",
+    "saved": "Network settings saved.",
+    "saveError": "Failed to save: {{error}}",
+    "save": "Save",
+    "browseFile": "Browse",
+    "shellEnvHint": "Tip: Proxy variables from your shell profile (~/.zshrc) are automatically inherited when not configured here.",
+    "systemCertsHint": "System certificate store is always enabled for uv commands (--system-certs)."
+  },
   "about": {
     "title": "About",
     "version": "Version",

@@ -3,6 +3,7 @@ use std::fs;
 use std::sync::OnceLock;
 use crate::fs::ProjectDirManager;
 use crate::python::PythonExecutor;
+use crate::commands::config::build_uv_env;
 
 /// Whether doc-parsing deps (PyPDF2, python-docx) have been checked/installed this session.
 static DOC_DEPS_OK: OnceLock<bool> = OnceLock::new();
@@ -32,7 +33,9 @@ pub fn ensure_doc_deps() {
                 .args([
                     "pip", "install", "PyPDF2", "python-docx",
                     "--python", &executor.python_bin().to_string_lossy(),
+                    "--system-certs",
                 ])
+                .envs(build_uv_env())
                 .output()
             {
                 return output.status.success();

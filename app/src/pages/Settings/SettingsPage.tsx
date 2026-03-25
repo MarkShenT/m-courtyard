@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Monitor, Info, Download, RefreshCw, FolderOpen, Palette, Languages, Globe, Type, HardDrive, Trash2, RotateCcw, ArrowLeft, Bell } from "lucide-react";
+import { Monitor, Info, Download, RefreshCw, FolderOpen, Palette, Languages, Globe, Type, HardDrive, Trash2, RotateCcw, ArrowLeft, Bell, Shield } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationPanel";
 import { checkEnvironment, setupEnvironment, installUv, type EnvironmentStatus } from "@/services/environment";
 import { useThemeStore, type ThemeId } from "@/stores/themeStore";
@@ -82,6 +82,14 @@ export function SettingsPage() {
   const [lmstudioApiStatus, setLmstudioApiStatus] = useState<"idle" | "checking" | "ok" | "error">("idle");
   const [lmstudioApiModelCount, setLmstudioApiModelCount] = useState(0);
 
+  // Network & Proxy state
+  const [netHttpProxy, setNetHttpProxy] = useState("");
+  const [netHttpsProxy, setNetHttpsProxy] = useState("");
+  const [netSslCertFile, setNetSslCertFile] = useState("");
+  const [netSslCertDir, setNetSslCertDir] = useState("");
+  const [netMsg, setNetMsg] = useState<{ type: "success" | "warning"; text: string } | null>(null);
+  const networkRef = useRef<HTMLElement | null>(null);
+
   const loadConfig = useCallback(async () => {
     try {
       const cfg = await invoke<AppConfigResponse>("get_app_config");
@@ -91,6 +99,31 @@ export function SettingsPage() {
       }
     } catch { /* ignore */ }
   }, []);
+
+  const loadNetworkConfig = useCallback(async () => {
+    try {
+      const net = await invoke<{ http_proxy: string | null; https_proxy: string | null; ssl_cert_file: string | null; ssl_cert_dir: string | null }>("get_network_config");
+      setNetHttpProxy(net.http_proxy || "");
+      setNetHttpsProxy(net.https_proxy || "");
+      setNetSslCertFile(net.ssl_cert_file || "");
+      setNetSslCertDir(net.ssl_cert_dir || "");
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleSaveNetworkConfig = async () => {
+    setNetMsg(null);
+    try {
+      await invoke("save_network_config", {
+        httpProxy: netHttpProxy || null,
+        httpsProxy: netHttpsProxy || null,
+        sslCertFile: netSslCertFile || null,
+        sslCertDir: netSslCertDir || null,
+      });
+      setNetMsg({ type: "success", text: t("network.saved") });
+    } catch (e) {
+      setNetMsg({ type: "warning", text: t("network.saveError", { error: String(e) }) });
+    }
+  };
 
   const loadOllamaPathInfo = useCallback(async (): Promise<OllamaPathInfo | null> => {
     try {
@@ -248,12 +281,13 @@ export function SettingsPage() {
     loadConfig();
     loadOllamaPathInfo();
     scanCache();
+    loadNetworkConfig();
     // Load app version
     import("@tauri-apps/api/app")
       .then(api => api.getVersion())
       .then(setAppVersion)
       .catch(console.error);
-  }, [loadConfig, loadOllamaPathInfo, scanCache]);
+  }, [loadConfig, loadOllamaPathInfo, scanCache, loadNetworkConfig]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -264,6 +298,7 @@ export function SettingsPage() {
     if (focus === "download-source") el = downloadSourceRef.current;
     else if (focus === "cache") el = cacheRef.current;
     else if (focus === "notifications") el = notificationsRef.current;
+    else if (focus === "network") el = networkRef.current;
     
     if (!el) return;
     requestAnimationFrame(() => {
@@ -304,13 +339,9 @@ export function SettingsPage() {
   const handleCheckLmstudioApi = async () => {
     setLmstudioApiStatus("checking");
     try {
-      const result = await invoke<{ ok: boolean; model_count: number }>("check_lmstudio_api");
-      if (result.ok) {
-        setLmstudioApiStatus("ok");
-        setLmstudioApiModelCount(result.model_count);
-      } else {
-        setLmstudioApiStatus("error");
-      }
+      const models = await invoke<string[]>("check_lmstudio_api");
+      setLmstudioApiStatus("ok");
+      setLmstudioApiModelCount(models.length);
     } catch {
       setLmstudioApiStatus("error");
     }
@@ -606,6 +637,102 @@ export function SettingsPage() {
             ⚠ {t("downloadSource.modelscopeWarn")}
           </p>
         )}
+      </section>
+
+      {/* Network & Proxy Section */}
+      <section ref={networkRef as React.RefObject<HTMLDivElement>} id="network" className="space-y-4 scroll-mt-24">
+        <div className="flex items-center gap-2">
+          <Shield size={18} className="text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+            {t("network.title")}
+          </h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("network.desc")}
+        </p>
+
+        {netMsg && (
+          <p className={`text-xs ${netMsg.type === "warning" ? "text-warning" : "text-success"}`}>
+            {netMsg.text}
+          </p>
+        )}
+
+        <div className="rounded-lg border border-border divide-y divide-border">
+          <div className="px-4 py-3 space-y-1.5">
+            <label className="text-sm text-muted-foreground">{t("network.httpProxy")}</label>
+            <input
+              type="text"
+              value={netHttpProxy}
+              onChange={(e) => setNetHttpProxy(e.target.value)}
+              placeholder={t("network.httpProxyPlaceholder")}
+              className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+            />
+          </div>
+          <div className="px-4 py-3 space-y-1.5">
+            <label className="text-sm text-muted-foreground">{t("network.httpsProxy")}</label>
+            <input
+              type="text"
+              value={netHttpsProxy}
+              onChange={(e) => setNetHttpsProxy(e.target.value)}
+              placeholder={t("network.httpsProxyPlaceholder")}
+              className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+            />
+          </div>
+          <div className="px-4 py-3 space-y-1.5">
+            <label className="text-sm text-muted-foreground">{t("network.sslCertFile")}</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={netSslCertFile}
+                onChange={(e) => setNetSslCertFile(e.target.value)}
+                placeholder={t("network.sslCertFilePlaceholder")}
+                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+              />
+              <button
+                onClick={async () => {
+                  const selected = await dialogOpen({ directory: false, multiple: false, title: t("network.sslCertFile") });
+                  if (selected && typeof selected === "string") setNetSslCertFile(selected);
+                }}
+                className="shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                {t("network.browseFile")}
+              </button>
+            </div>
+          </div>
+          <div className="px-4 py-3 space-y-1.5">
+            <label className="text-sm text-muted-foreground">{t("network.sslCertDir")}</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={netSslCertDir}
+                onChange={(e) => setNetSslCertDir(e.target.value)}
+                placeholder={t("network.sslCertDirPlaceholder")}
+                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+              />
+              <button
+                onClick={async () => {
+                  const selected = await dialogOpen({ directory: true, multiple: false, title: t("network.sslCertDir") });
+                  if (selected && typeof selected === "string") setNetSslCertDir(selected);
+                }}
+                className="shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                {t("network.browseFile")}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={handleSaveNetworkConfig}
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          {t("network.save")}
+        </button>
+
+        <div className="space-y-1">
+          <p className="text-[10px] text-muted-foreground/60">{t("network.shellEnvHint")}</p>
+          <p className="text-[10px] text-muted-foreground/60">{t("network.systemCertsHint")}</p>
+        </div>
       </section>
 
       {/* Storage Section */}

@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::Emitter;
 use crate::python::PythonExecutor;
 use crate::fs::ProjectDirManager;
-use crate::commands::config::resolve_ollama_bin_status_from_config;
+use crate::commands::config::{resolve_ollama_bin_status_from_config, build_uv_env};
 use std::path::PathBuf;
 
 #[derive(Clone, Serialize)]
@@ -102,7 +102,8 @@ pub async fn setup_environment(app: tauri::AppHandle) -> Result<(), String> {
     }));
 
     let venv_result = tokio::process::Command::new(&uv_path)
-        .args(["venv", &venv_dir.to_string_lossy(), "--python", "3.11"])
+        .args(["venv", &venv_dir.to_string_lossy(), "--python", "3.11", "--system-certs"])
+        .envs(build_uv_env())
         .output()
         .await
         .map_err(|e| format!("Failed to create venv: {}", e))?;
@@ -122,7 +123,9 @@ pub async fn setup_environment(app: tauri::AppHandle) -> Result<(), String> {
         .args([
             "pip", "install", "mlx-lm", "PyPDF2", "python-docx",
             "--python", &executor.python_bin().to_string_lossy(),
+            "--system-certs",
         ])
+        .envs(build_uv_env())
         .output()
         .await
         .map_err(|e| format!("Failed to install mlx-lm: {}", e))?;
@@ -152,6 +155,7 @@ pub async fn install_uv(app: tauri::AppHandle) -> Result<(), String> {
     // Use the official uv installer script
     let result = tokio::process::Command::new("/bin/sh")
         .args(["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"])
+        .envs(build_uv_env())
         .output()
         .await
         .map_err(|e| format!("Failed to run uv installer: {}", e))?;

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-03-25
+
+### Added
+- **Enterprise Network Compatibility (Cluster 11)**: Added a dedicated **Network & Proxy** section in Settings so users can configure `HTTP_PROXY`, `HTTPS_PROXY`, `SSL_CERT_FILE`, and `SSL_CERT_DIR` directly in the app.
+
+### Fixed
+- **uv TLS Certificate Handling**: Replaced the deprecated `--native-tls` flag with the officially recommended `--system-certs` flag across all `uv` subprocesses used for environment setup and dependency installation.
+- **Corporate Proxy / Certificate Inheritance**: Added shared environment injection for `uv` subprocesses so proxy variables and custom certificate settings from either app config or the user's shell environment are passed through consistently, including `UV_SYSTEM_CERTS=true`.
+- **Settings LM Studio Connectivity Check**: Fixed the Settings page LM Studio API check to match the backend response shape and report model count correctly.
+- **uv Installer Network Compatibility**: The in-app `Install uv` flow now also receives enterprise proxy and certificate environment variables, improving first-time setup behind corporate networks.
+
+### Changed
+- Updated app version, bundled metadata, Settings version display, and release materials to `0.5.2`.
+
 ## [0.5.1] - 2026-03-23
 
 ### Added
@@ -365,6 +379,7 @@ Delivers the **Batch Processing** cluster (PRD D-1 · D-2 · H-3): multi-file dr
 - **GitHub Actions CI**: Automated .dmg build and release on tag push
 - **Discord Integration**: Automated release notifications via webhook
 
+[0.5.2]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.5.2
 [0.5.1]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.5.1
 [0.5.0]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.5.0
 [0.4.11]: https://github.com/Mcourtyard/m-courtyard/releases/tag/v0.4.11
